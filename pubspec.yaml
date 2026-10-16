@@ -1,0 +1,50 @@
+name: expense_tracker
+description: "Expense Tracker: dashboard de finanzas personales con bóvedas de ahorro y conversor de divisas en tiempo real."
+publish_to: 'none'
+version: 1.1.0+2
+
+environment:
+  sdk: '>=3.4.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+
+  # Base de datos local / persistencia offline
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+
+  # Gestión de estado global (tema, idioma, divisas, datos financieros)
+  provider: ^6.1.2
+
+  # Gráfico circular (donut) interactivo del balance
+  fl_chart: ^1.2.0
+
+  # Consumo de la API de tasas de cambio en tiempo real
+  http: ^1.2.2
+
+  # Exportar/importar datos (respaldo propio y transferencia de dispositivo)
+  path_provider: ^2.1.4
+  share_plus: ^10.1.2
+  file_picker: ^8.0.0
+
+  # Fondo personalizado: elegir imagen + redimensionar/desenfocar
+  image_picker: ^1.1.0
+  image: ^4.7.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
+
+# flutter_plugin_android_lifecycle (dependencia transitiva de image_picker,
+# file_picker y share_plus) empezó a exigir compileSdk 36 en sus versiones
+# más nuevas. En vez de subir el compileSdk de todo el proyecto, se fija
+# esta dependencia puntual a una versión anterior compatible con el
+# compileSdk que trae por defecto el scaffold que genera el workflow.
+dependency_overrides:
+  flutter_plugin_android_lifecycle: 2.0.20

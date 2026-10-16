@@ -1,0 +1,38 @@
+{
+  "name": "YoRHa No.2 Type B",
+  "author": "Noctis",
+  "description": "Gloria a la humanidad. Negro y blanco con el dorado del filo de una espada, inspirado en 2B. Tarjetas biseladas como el filo de una hoja, corchetes de esquina estilo HUD y un leve parpadeo de scanlines encima de todo.",
+  "preferredBrightness": "dark",
+  "colors": {
+    "background": "#121114",
+    "card": "#1C1B1F",
+    "cardAlt": "#26242A",
+    "accent": "#C9A15C",
+    "accentSecondary": "#EDEAE2",
+    "textPrimary": "#E8E5DE",
+    "textSecondary": "#8A877E",
+    "warning": "#A13A3A",
+    "expense": "#9C6B3E",
+    "vault": "#5A7A8A",
+    "success": "#6E8264",
+    "danger": "#A13A3A",
+    "border": "#3A3833"
+  },
+  "style": {
+    "cardRadius": 5,
+    "buttonRadius": 4,
+    "cardShape": "beveled",
+    "buttonShape": "beveled",
+    "cardStyle": "outlined",
+    "buttonStyle": "outlined",
+    "borderWidth": 1.1,
+    "elevation": 0,
+    "density": "compact",
+    "cornerAccent": "brackets",
+    "cornerAccentColor": "#C9A15C"
+  },
+  "overlay": {
+    "pattern": "scanlines",
+    "opacity": 0.05
+  }
+}

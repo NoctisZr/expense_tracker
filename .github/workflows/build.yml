@@ -1,0 +1,64 @@
+name: Compilar APK
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar el código del repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Java (requerido por Gradle/Android)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Configurar Flutter (canal estable)
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Generar el andamiaje nativo de Android
+        run: |
+          flutter create --platforms=android --org com.noctis.expensetracker --project-name expense_tracker /tmp/scaffold
+          cp -r /tmp/scaffold/android .
+
+      - name: Agregar el permiso de Internet al AndroidManifest
+        run: |
+          MANIFEST="android/app/src/main/AndroidManifest.xml"
+          if ! grep -q "android.permission.INTERNET" "$MANIFEST"; then
+            sed -i '/<manifest /a\    <uses-permission android:name="android.permission.INTERNET"/>' "$MANIFEST"
+          fi
+          cat "$MANIFEST"
+
+      - name: Instalar dependencias (hive_flutter, provider, fl_chart, http...)
+        run: flutter pub get
+
+      - name: Analizar el código (informativo, no bloquea el build)
+        run: flutter analyze || true
+
+      - name: Compilar el APK en modo release
+        run: flutter build apk --release
+
+      - name: Subir el APK como artifact de esta ejecución
+        uses: actions/upload-artifact@v4
+        with:
+          name: expense-tracker-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+
+      - name: Publicar el APK en un Release descargable
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: "Expense Tracker — build #${{ github.run_number }}"
+          files: build/app/outputs/flutter-apk/app-release.apk

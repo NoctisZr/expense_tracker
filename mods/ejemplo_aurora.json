@@ -1,0 +1,37 @@
+{
+  "name": "Aurora",
+  "author": "Noctis",
+  "description": "Cielo nocturno con destellos verdes y azules, como una aurora boreal. Esquinas suaves tipo squircle y una grilla sutil de estrellas de fondo.",
+  "preferredBrightness": "dark",
+  "colors": {
+    "background": "#0D1B2A",
+    "card": "#1B2A41",
+    "cardAlt": "#253F5C",
+    "accent": "#3DDC97",
+    "accentSecondary": "#6F8FFF",
+    "textPrimary": "#F0F4F8",
+    "textSecondary": "#8DA3BD",
+    "warning": "#FF6B6B",
+    "expense": "#FF9166",
+    "vault": "#6FC3FF",
+    "success": "#4ADE94",
+    "danger": "#FF6B6B",
+    "border": "#2E4864"
+  },
+  "style": {
+    "cardRadius": 20,
+    "buttonRadius": 16,
+    "cardShape": "continuous",
+    "buttonShape": "continuous",
+    "cardStyle": "filled",
+    "buttonStyle": "filled",
+    "borderWidth": 1.5,
+    "elevation": 2,
+    "density": "comfortable",
+    "cornerAccent": "none"
+  },
+  "overlay": {
+    "pattern": "grid",
+    "opacity": 0.04
+  }
+}

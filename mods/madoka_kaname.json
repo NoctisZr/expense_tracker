@@ -1,0 +1,37 @@
+{
+  "name": "Madoka Kaname",
+  "author": "Noctis",
+  "description": "Un deseo capaz de reescribir el destino. Paleta clara y pastel inspirada en Madoka: rosa suave, blanco y un toque de dorado. Tarjetas en forma de píldora para un look tierno.",
+  "preferredBrightness": "light",
+  "colors": {
+    "background": "#FFF3F7",
+    "card": "#FFFBFD",
+    "cardAlt": "#FCE4ED",
+    "accent": "#FF8FB3",
+    "accentSecondary": "#F5C77E",
+    "textPrimary": "#5C3A48",
+    "textSecondary": "#B98CA0",
+    "warning": "#F2617E",
+    "expense": "#FFB3C6",
+    "vault": "#C9B6FF",
+    "success": "#93E0BE",
+    "danger": "#F2617E",
+    "border": "#FFBBD6"
+  },
+  "style": {
+    "cardRadius": 24,
+    "buttonRadius": 20,
+    "cardShape": "stadium",
+    "buttonShape": "stadium",
+    "cardStyle": "outlined",
+    "buttonStyle": "filled",
+    "borderWidth": 1.5,
+    "elevation": 0,
+    "density": "comfortable",
+    "cornerAccent": "none"
+  },
+  "overlay": {
+    "pattern": "none",
+    "opacity": 0.05
+  }
+}

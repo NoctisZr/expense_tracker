@@ -1,0 +1,37 @@
+{
+  "name": "Atardecer",
+  "author": "Noctis",
+  "description": "Tonos cálidos de un atardecer: naranjas, dorados y rojos profundos. Forma clásica redondeada, sin adornos extra.",
+  "preferredBrightness": "dark",
+  "colors": {
+    "background": "#1F1310",
+    "card": "#2E1D18",
+    "cardAlt": "#3D2620",
+    "accent": "#FF8C42",
+    "accentSecondary": "#FFC857",
+    "textPrimary": "#FDF1EA",
+    "textSecondary": "#C9A594",
+    "warning": "#E63946",
+    "expense": "#E85D4C",
+    "vault": "#3E8E8A",
+    "success": "#A8C66C",
+    "danger": "#E63946",
+    "border": "#4A3128"
+  },
+  "style": {
+    "cardRadius": 18,
+    "buttonRadius": 14,
+    "cardShape": "rounded",
+    "buttonShape": "rounded",
+    "cardStyle": "filled",
+    "buttonStyle": "filled",
+    "borderWidth": 1.5,
+    "elevation": 0,
+    "density": "compact",
+    "cornerAccent": "none"
+  },
+  "overlay": {
+    "pattern": "none",
+    "opacity": 0.05
+  }
+}
