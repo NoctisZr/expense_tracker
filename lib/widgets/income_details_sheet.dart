@@ -8,6 +8,7 @@ import '../utils/app_theme_extension.dart';
 import '../utils/formatters.dart';
 import '../utils/income_analysis.dart';
 import '../utils/mod_shapes.dart';
+import 'income_dialogs.dart';
 
 Future<void> showIncomeDetailsSheet(BuildContext context, {required Income income}) {
   return showModalBottomSheet(
@@ -89,6 +90,12 @@ class _IncomeDetailsSheet extends StatelessWidget {
                           Text(formatDateShort(income.date), style: theme.textTheme.bodySmall),
                         ],
                       ),
+                    ),
+                    IconButton(
+                      onPressed: () => showAddIncomeDialog(context, existing: income),
+                      icon: const Icon(Icons.edit_outlined, size: 20),
+                      tooltip: locale.t('editar_ingreso'),
+                      visualDensity: VisualDensity.compact,
                     ),
                     TextButton(
                       onPressed: () => Navigator.of(context).pop(),

@@ -59,6 +59,28 @@ class BudgetSection extends StatelessWidget {
                 currencyCode: finance.localCurrency,
                 locale: locale,
               ),
+          if (budgetedCategories.length > 1) ...[
+            const Divider(height: 24),
+            Builder(builder: (context) {
+              double totalLimit = 0;
+              double totalSpent = 0;
+              for (final cat in budgetedCategories) {
+                totalLimit += budgets[cat]!;
+                totalSpent += monthSpentLocal(finance, currency, cat);
+              }
+              return Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(locale.t('presupuesto_total'),
+                      style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold)),
+                  Text(
+                    '${formatAmount(totalSpent)} / ${formatCurrency(totalLimit, finance.localCurrency)}',
+                    style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold),
+                  ),
+                ],
+              );
+            }),
+          ],
         ],
       ),
     );

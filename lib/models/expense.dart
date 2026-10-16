@@ -1,4 +1,5 @@
 import 'package:hive/hive.dart';
+import '../utils/category_registry.dart';
 
 /// Claves internas de categoría. No se traducen aquí: la etiqueta visible
 /// se resuelve en tiempo de UI a través de AppStrings, para que un cambio
@@ -9,7 +10,13 @@ class ExpenseCategory {
   static const String comida = 'comida';
   static const String otros = 'otros';
 
-  static const List<String> all = [compras, servicios, comida, otros];
+  static const List<String> builtIn = [compras, servicios, comida, otros];
+
+  /// Categorías integradas + las que creó el usuario.
+  static List<String> get all => [
+        ...builtIn,
+        ...CategoryRegistry.custom.map((c) => c.name),
+      ];
 }
 
 /// Representa un gasto individual registrado por el usuario.
@@ -21,6 +28,15 @@ class Expense {
   String category;
   DateTime date;
 
+  /// Nota opcional del usuario.
+  String? note;
+
+  /// Equivalente en moneda local calculado con la tasa del día en que se
+  /// registró el gasto (y la moneda local de ese momento). Es una foto
+  /// histórica: no cambia cuando cambian las tasas.
+  double? localAmount;
+  String? localCurrencyAtCreation;
+
   Expense({
     required this.id,
     required this.name,
@@ -28,6 +44,9 @@ class Expense {
     required this.currency,
     required this.category,
     required this.date,
+    this.note,
+    this.localAmount,
+    this.localCurrencyAtCreation,
   });
 
   Map<String, dynamic> toJson() => {
@@ -37,6 +56,9 @@ class Expense {
         'currency': currency,
         'category': category,
         'date': date.toIso8601String(),
+        if (note != null && note!.isNotEmpty) 'note': note,
+        if (localAmount != null) 'localAmount': localAmount,
+        if (localCurrencyAtCreation != null) 'localCurrencyAtCreation': localCurrencyAtCreation,
       };
 
   factory Expense.fromJson(Map<String, dynamic> json) => Expense(
@@ -46,6 +68,9 @@ class Expense {
         currency: json['currency'] as String,
         category: json['category'] as String,
         date: DateTime.parse(json['date'] as String),
+        note: json['note'] as String?,
+        localAmount: (json['localAmount'] as num?)?.toDouble(),
+        localCurrencyAtCreation: json['localCurrencyAtCreation'] as String?,
       );
 }
 
@@ -70,13 +95,17 @@ class ExpenseAdapter extends TypeAdapter<Expense> {
       currency: fields[3] as String,
       category: fields[4] as String,
       date: fields[5] as DateTime,
+      // Campos añadidos en la v1.2: los gastos antiguos no los tienen (null).
+      note: fields[6] as String?,
+      localAmount: (fields[7] as num?)?.toDouble(),
+      localCurrencyAtCreation: fields[8] as String?,
     );
   }
 
   @override
   void write(BinaryWriter writer, Expense obj) {
     writer
-      ..writeByte(6)
+      ..writeByte(9)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -88,6 +117,12 @@ class ExpenseAdapter extends TypeAdapter<Expense> {
       ..writeByte(4)
       ..write(obj.category)
       ..writeByte(5)
-      ..write(obj.date);
+      ..write(obj.date)
+      ..writeByte(6)
+      ..write(obj.note)
+      ..writeByte(7)
+      ..write(obj.localAmount)
+      ..writeByte(8)
+      ..write(obj.localCurrencyAtCreation);
   }
 }

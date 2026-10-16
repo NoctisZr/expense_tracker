@@ -15,12 +15,16 @@ class Vault extends HiveObject {
   double currentAmount;
   final String currency;
 
+  /// Fecha límite opcional para alcanzar la meta (v1.2).
+  DateTime? targetDate;
+
   Vault({
     required this.id,
     required this.name,
     required this.targetAmount,
     required this.currentAmount,
     required this.currency,
+    this.targetDate,
   });
 
   double get progress => targetAmount <= 0
@@ -35,6 +39,7 @@ class Vault extends HiveObject {
         'targetAmount': targetAmount,
         'currentAmount': currentAmount,
         'currency': currency,
+        if (targetDate != null) 'targetDate': targetDate!.toIso8601String(),
       };
 
   factory Vault.fromJson(Map<String, dynamic> json) => Vault(
@@ -43,6 +48,9 @@ class Vault extends HiveObject {
         targetAmount: (json['targetAmount'] as num).toDouble(),
         currentAmount: (json['currentAmount'] as num).toDouble(),
         currency: json['currency'] as String,
+        targetDate: json['targetDate'] == null
+            ? null
+            : DateTime.tryParse(json['targetDate'] as String),
       );
 }
 
@@ -63,13 +71,14 @@ class VaultAdapter extends TypeAdapter<Vault> {
       targetAmount: (fields[2] as num).toDouble(),
       currentAmount: (fields[3] as num).toDouble(),
       currency: fields[4] as String,
+      targetDate: fields[5] as DateTime?,
     );
   }
 
   @override
   void write(BinaryWriter writer, Vault obj) {
     writer
-      ..writeByte(5)
+      ..writeByte(6)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -79,6 +88,8 @@ class VaultAdapter extends TypeAdapter<Vault> {
       ..writeByte(3)
       ..write(obj.currentAmount)
       ..writeByte(4)
-      ..write(obj.currency);
+      ..write(obj.currency)
+      ..writeByte(5)
+      ..write(obj.targetDate);
   }
 }

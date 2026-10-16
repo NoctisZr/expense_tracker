@@ -6,7 +6,9 @@ import '../providers/finance_provider.dart';
 import '../providers/locale_provider.dart';
 import '../utils/app_colors.dart';
 import '../utils/category_style.dart';
+import '../utils/formatters.dart';
 import '../widgets/add_expense_section.dart';
+import '../widgets/analysis_section.dart';
 import '../widgets/balance_donut_chart.dart';
 import '../widgets/budget_section.dart';
 import '../widgets/category_selector_row.dart';
@@ -21,6 +23,7 @@ import '../widgets/recurring_section.dart';
 import '../widgets/section_card.dart';
 import '../widgets/vault_card.dart';
 import '../widgets/vault_details_sheet.dart';
+import '../widgets/upcoming_charges.dart';
 import '../widgets/vault_dialogs.dart';
 import '../widgets/workspace_selector.dart';
 
@@ -34,7 +37,9 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
+  int _view = 0; // 0 Resumen, 1 Movimientos, 2 Planificación
   bool _showCalendar = false;
+  DateTimeRange? _range;
   String _query = '';
   String? _filterCategory;
 
@@ -99,8 +104,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final List<Expense> filtered = expenses
         .where((e) =>
             (_filterCategory == null || e.category == _filterCategory) &&
-            (query.isEmpty || e.name.toLowerCase().contains(query)))
+            (query.isEmpty || e.name.toLowerCase().contains(query)) &&
+            (_range == null ||
+                (!e.date.isBefore(_range!.start) &&
+                    e.date.isBefore(_range!.end.add(const Duration(days: 1))))))
         .toList();
+    final bool filtersActive = query.isNotEmpty || _filterCategory != null || _range != null;
+    double filteredTotal = 0;
+    if (filtersActive) {
+      for (final e in filtered) {
+        filteredTotal += finance.expenseLocalValue(e, currency);
+      }
+    }
 
     final mostRecentIncome = incomes.isEmpty ? null : incomes.first;
 
@@ -116,7 +131,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       );
 
       for (final e in finance.expensesInPeriod(mostRecentIncome.date, null)) {
-        periodExpensesLocal += currency.convert(e.amount, e.currency, finance.localCurrency);
+        periodExpensesLocal += finance.expenseLocalValue(e, currency);
       }
 
       for (final t in finance.vaultTransactionsInPeriod(mostRecentIncome.date, null)) {
@@ -136,6 +151,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
               child: WorkspaceSelector(),
             ),
             const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: SegmentedButton<int>(
+                showSelectedIcon: false,
+                segments: [
+                  ButtonSegment(value: 0, label: Text(locale.t('vista_resumen'), style: const TextStyle(fontSize: 12.5))),
+                  ButtonSegment(value: 1, label: Text(locale.t('vista_movimientos'), style: const TextStyle(fontSize: 12.5))),
+                  ButtonSegment(value: 2, label: Text(locale.t('vista_planificacion'), style: const TextStyle(fontSize: 12.5))),
+                ],
+                selected: {_view},
+                onSelectionChanged: (selection) => setState(() => _view = selection.first),
+                style: SegmentedButton.styleFrom(
+                  selectedBackgroundColor: theme.colorScheme.primary,
+                  selectedForegroundColor: AppColors.onColorFor(theme.colorScheme.primary),
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
+            if (_view == 0) ...[
             SectionCard(
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -245,12 +279,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   onViewDetails: () => showVaultDetailsSheet(context, vault: vault),
                 ),
               ),
-            const SizedBox(height: 10),
-            const BudgetSection(),
             const SizedBox(height: 18),
+            const AnalysisSection(),
+            const SizedBox(height: 18),
+            const CategorySummary(),
+            ],
+            if (_view == 1) ...[
             const AddExpenseSection(),
-            const SizedBox(height: 18),
-            const RecurringSection(),
             const SizedBox(height: 18),
             SegmentedButton<bool>(
               segments: [
@@ -282,6 +317,38 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               ),
               const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () async {
+                        final DateTime now = DateTime.now();
+                        final DateTimeRange? picked = await showDateRangePicker(
+                          context: context,
+                          firstDate: DateTime(2000),
+                          lastDate: now.add(const Duration(days: 366)),
+                          initialDateRange: _range,
+                        );
+                        if (picked != null) setState(() => _range = picked);
+                      },
+                      icon: const Icon(Icons.date_range_rounded, size: 18),
+                      label: Text(
+                        _range == null
+                            ? locale.t('rango_fechas')
+                            : '${formatDateShort(_range!.start)} – ${formatDateShort(_range!.end)}',
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+                  if (_range != null)
+                    IconButton(
+                      onPressed: () => setState(() => _range = null),
+                      icon: const Icon(Icons.close, size: 18),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                ],
+              ),
+              const SizedBox(height: 10),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
@@ -306,6 +373,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ],
               ),
               const SizedBox(height: 12),
+              if (filtersActive)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Text(
+                    '${filtered.length} · ${locale.t('total_filtrado')}: ${formatCurrency(filteredTotal, finance.localCurrency)}',
+                    style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                  ),
+                ),
             ],
             if (_showCalendar)
               SectionCard(child: const ExpenseCalendar())
@@ -335,8 +410,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ],
                 ),
               ),
-            const SizedBox(height: 18),
-            const CategorySummary(),
+            ],
+            if (_view == 2) ...[
+              const UpcomingCharges(),
+              const BudgetSection(),
+              const SizedBox(height: 18),
+              const RecurringSection(),
+            ],
           ],
         ),
       ),

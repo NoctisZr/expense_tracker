@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import '../models/expense.dart';
+import 'category_registry.dart';
 
 IconData categoryIcon(String category) {
+  final CustomCategory? custom = CategoryRegistry.find(category);
+  if (custom != null) return custom.icon;
   switch (category) {
     case ExpenseCategory.compras:
       return Icons.shopping_bag_rounded;
@@ -16,6 +19,8 @@ IconData categoryIcon(String category) {
 }
 
 Color categoryColor(String category) {
+  final CustomCategory? custom = CategoryRegistry.find(category);
+  if (custom != null) return custom.color;
   switch (category) {
     case ExpenseCategory.compras:
       return const Color(0xFF4FC3D9);
@@ -30,6 +35,9 @@ Color categoryColor(String category) {
 }
 
 String categoryLabelKey(String category) {
+  // Las categorías personalizadas no tienen traducción: AppStrings devuelve
+  // la propia clave (el nombre) cuando no existe, así que se muestra tal cual.
+  if (CategoryRegistry.find(category) != null) return category;
   switch (category) {
     case ExpenseCategory.compras:
       return 'categoria_compras';

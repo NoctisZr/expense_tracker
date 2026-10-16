@@ -30,15 +30,13 @@ class _CategorySummaryState extends State<CategorySummary> {
     final locale = context.watch<LocaleProvider>();
     final theme = Theme.of(context);
 
-    final Map<String, Map<String, double>> raw = finance.totalExpensesByCategoryAndCurrency();
-
-    final Map<String, double> totals = {};
-    for (final cat in ExpenseCategory.all) {
-      double sum = 0;
-      (raw[cat] ?? const {}).forEach((code, amount) {
-        sum += currency.convert(amount, code, finance.localCurrency);
-      });
-      totals[cat] = sum;
+    final Map<String, double> totals = {
+      for (final cat in ExpenseCategory.all) cat: 0.0,
+    };
+    for (final e in finance.expenses) {
+      if (totals.containsKey(e.category)) {
+        totals[e.category] = totals[e.category]! + finance.expenseLocalValue(e, currency);
+      }
     }
     final double grandTotal = totals.values.fold(0.0, (a, b) => a + b);
 

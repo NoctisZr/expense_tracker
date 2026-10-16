@@ -124,7 +124,7 @@ ThemeData buildAppTheme({required bool isDark, required Color accent, ModTheme? 
       color: cardFill,
       elevation: effectiveElevation,
       margin: EdgeInsets.zero,
-      shape: shapeBorderFor(cardShapeKey, effectiveCardRadius, side: cardBorderSide),
+      shape: containerShapeBorderFor(cardShapeKey, effectiveCardRadius, side: cardBorderSide),
     ),
     dividerColor: colorScheme.outline,
     hintColor: hintColor,
@@ -189,7 +189,7 @@ ThemeData buildAppTheme({required bool isDark, required Color accent, ModTheme? 
     // Restaurado a DialogThemeData
     dialogTheme: DialogThemeData(
       backgroundColor: colorScheme.surface,
-      shape: shapeBorderFor(cardShapeKey, effectiveCardRadius + 2),
+      shape: containerShapeBorderFor(cardShapeKey, effectiveCardRadius + 2),
     ),
     snackBarTheme: SnackBarThemeData(
       backgroundColor: colorScheme.surfaceContainerHighest,

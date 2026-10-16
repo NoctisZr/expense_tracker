@@ -4,14 +4,25 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
+import '../models/expense.dart';
 import '../models/mod_theme.dart';
+import '../providers/currency_provider.dart';
 import '../providers/finance_provider.dart';
 import '../providers/locale_provider.dart';
+import '../providers/security_provider.dart';
 import '../providers/theme_provider.dart';
 import '../services/background_image_service.dart';
 import '../services/backup_service.dart';
 import '../utils/app_colors.dart';
+import '../utils/category_registry.dart';
+import '../utils/csv_utils.dart';
+import '../utils/currency_list.dart';
+import '../widgets/category_dialogs.dart';
+import '../widgets/mod_gallery.dart';
+import '../widgets/pin_widgets.dart';
 import '../widgets/section_card.dart';
+import '../widgets/settings_dialogs.dart';
+import 'trash_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -53,32 +64,40 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _handleImport() async {
     final locale = context.read<LocaleProvider>();
-    final bool? confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(locale.t('importar_confirmacion_titulo')),
-        content: Text(locale.t('importar_confirmacion_mensaje')),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: Text(locale.t('cancelar')),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: Text(locale.t('confirmar')),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
+    final bool? merge = await askImportMode(context);
+    if (merge == null || !mounted) return;
 
     try {
       final Map<String, dynamic>? data = await _backupService.pickAndParseBackup();
       if (data == null || !mounted) return;
-      await context.read<FinanceProvider>().importData(data);
+      await context.read<FinanceProvider>().importData(data, merge: merge);
       _showSnack(locale.t('importacion_exitosa'));
     } on BackupImportException catch (e) {
       _showSnack(e.message);
+    } catch (_) {
+      _showSnack(locale.t('error_importar'));
+    }
+  }
+
+  Future<void> _handleImportCsv() async {
+    final locale = context.read<LocaleProvider>();
+    final finance = context.read<FinanceProvider>();
+    try {
+      final String? content = await _backupService.pickCsvContent();
+      if (content == null || !mounted) return;
+      final CsvImportResult result = parseExpensesCsv(
+        content,
+        defaultCurrency: finance.localCurrency,
+        knownCategories: ExpenseCategory.all,
+        supportedCurrencies: kSupportedCurrencies.toSet(),
+      );
+      if (!result.headerRecognized || result.expenses.isEmpty) {
+        _showSnack(locale.t('csv_no_reconocido'));
+        return;
+      }
+      final int added = finance.addImportedExpenses(result.expenses);
+      _showSnack('${locale.t('csv_importado')}: $added'
+          '${result.skipped > 0 ? ' (${locale.t('csv_omitidas')}: ${result.skipped})' : ''}');
     } catch (_) {
       _showSnack(locale.t('error_importar'));
     }
@@ -99,11 +118,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (decoded is! Map<String, dynamic>) {
         throw const FormatException('formato inválido');
       }
-      final Map<String, dynamic> modJson = decoded;
-      final ModTheme mod = ModTheme.fromJson(modJson);
       if (!mounted) return;
-      context.read<ThemeProvider>().applyMod(mod, modJson);
-      _showSnack(locale.t('mod_aplicado_exitosamente'));
+      final bool applied = await applyModWithChecks(context, decoded);
+      if (applied) _showSnack(locale.t('mod_aplicado_exitosamente'));
     } catch (_) {
       _showSnack(locale.t('mod_invalido'));
     }
@@ -139,6 +156,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  void _confirmDeleteCategory(String name, LocaleProvider locale) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(locale.t('eliminar_categoria_titulo')),
+        content: Text(locale.t('eliminar_categoria_mensaje')),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: Text(locale.t('cancelar')),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              context.read<FinanceProvider>().deleteCustomCategory(name);
+              Navigator.of(dialogContext).pop();
+            },
+            child: Text(locale.t('eliminar')),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _handleRemoveMod() async {
     context.read<ThemeProvider>().removeMod();
   }
@@ -147,6 +187,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget build(BuildContext context) {
     final themeProvider = context.watch<ThemeProvider>();
     final locale = context.watch<LocaleProvider>();
+    final security = context.watch<SecurityProvider>();
+    final currency = context.watch<CurrencyProvider>();
+    final finance = context.watch<FinanceProvider>();
     final theme = Theme.of(context);
 
     return SafeArea(
@@ -245,6 +288,125 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  SectionLabel(locale.t('tamano_texto')),
+                  Slider(
+                    value: themeProvider.textScale,
+                    min: 0.85,
+                    max: 1.4,
+                    divisions: 11,
+                    label: '${(themeProvider.textScale * 100).round()}%',
+                    onChanged: (value) => context.read<ThemeProvider>().setTextScale(value),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            SectionCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SectionLabel(locale.t('seguridad')),
+                  const SizedBox(height: 6),
+                  Text(
+                    security.hasPin ? locale.t('pin_activo') : locale.t('pin_descripcion'),
+                    style: theme.textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: [
+                      if (!security.hasPin)
+                        OutlinedButton.icon(
+                          onPressed: () => showPinFlowDialog(context, PinFlow.setNew),
+                          icon: const Icon(Icons.lock_outline_rounded),
+                          label: Text(locale.t('activar_pin')),
+                        )
+                      else ...[
+                        OutlinedButton.icon(
+                          onPressed: () => showPinFlowDialog(context, PinFlow.change),
+                          icon: const Icon(Icons.password_rounded),
+                          label: Text(locale.t('cambiar_pin')),
+                        ),
+                        TextButton.icon(
+                          onPressed: () => showPinFlowDialog(context, PinFlow.remove),
+                          icon: Icon(Icons.lock_open_rounded, color: theme.colorScheme.error),
+                          label: Text(locale.t('quitar_pin'),
+                              style: TextStyle(color: theme.colorScheme.error)),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            SectionCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SectionLabel(locale.t('monedas_y_tasas')),
+                  const SizedBox(height: 6),
+                  Text(
+                    currency.isStale && currency.hasRates
+                        ? locale.t('tasas_desactualizadas')
+                        : locale.t('tasas_ayuda'),
+                    style: theme.textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 6),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(locale.t('usar_tasa_historica')),
+                    subtitle: Text(locale.t('usar_tasa_historica_ayuda'), style: theme.textTheme.bodySmall),
+                    value: finance.useHistoricalRates,
+                    onChanged: (value) => context.read<FinanceProvider>().setUseHistoricalRates(value),
+                  ),
+                  const SizedBox(height: 6),
+                  OutlinedButton.icon(
+                    onPressed: () => showManualRatesDialog(context),
+                    icon: const Icon(Icons.edit_note_rounded),
+                    label: Text(locale.t('tasas_manuales')),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            SectionCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SectionLabel(locale.t('mis_categorias')),
+                  const SizedBox(height: 6),
+                  if (CategoryRegistry.custom.isEmpty)
+                    Text(locale.t('sin_categorias_propias'), style: theme.textTheme.bodySmall)
+                  else
+                    for (final c in CategoryRegistry.custom)
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: CircleAvatar(
+                          backgroundColor: c.color.withValues(alpha: 0.18),
+                          child: Icon(c.icon, color: c.color, size: 20),
+                        ),
+                        title: Text(c.name),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.delete_outline),
+                          onPressed: () => _confirmDeleteCategory(c.name, locale),
+                        ),
+                      ),
+                  const SizedBox(height: 6),
+                  OutlinedButton.icon(
+                    onPressed: () => showAddCategoryDialog(context),
+                    icon: const Icon(Icons.add_rounded),
+                    label: Text(locale.t('nueva_categoria')),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            SectionCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                   SectionLabel(locale.t('respaldo_y_datos')),
                   const SizedBox(height: 6),
                   Text(locale.t('exportar_descripcion'), style: theme.textTheme.bodySmall),
@@ -269,6 +431,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     onPressed: _handleImport,
                     icon: const Icon(Icons.download_rounded),
                     label: Text(locale.t('importar_datos')),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(locale.t('importar_csv_descripcion'), style: theme.textTheme.bodySmall),
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    onPressed: _handleImportCsv,
+                    icon: const Icon(Icons.playlist_add_rounded),
+                    label: Text(locale.t('importar_csv')),
+                  ),
+                  const SizedBox(height: 16),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: () => showAutoBackupsSheet(context),
+                        icon: const Icon(Icons.history_rounded),
+                        label: Text(locale.t('respaldos_automaticos')),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: () => Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => const TrashScreen()),
+                        ),
+                        icon: const Icon(Icons.delete_sweep_outlined),
+                        label: Text(locale.t('papelera')),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -315,6 +504,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     spacing: 10,
                     runSpacing: 10,
                     children: [
+                      OutlinedButton.icon(
+                        onPressed: () => showModGallery(context),
+                        icon: const Icon(Icons.palette_outlined),
+                        label: Text(locale.t('galeria_mods')),
+                      ),
                       OutlinedButton.icon(
                         onPressed: _handleLoadMod,
                         icon: const Icon(Icons.extension_rounded),

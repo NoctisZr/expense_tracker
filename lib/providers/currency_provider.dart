@@ -5,10 +5,19 @@ import '../services/currency_api_service.dart';
 class CurrencyProvider extends ChangeNotifier {
   static const String _cachedRatesKey = 'cachedRates';
   static const String _cachedUpdatedAtKey = 'cachedRatesUpdatedAt';
+  static const String _manualRatesKey = 'manualRates';
 
   final Box settingsBox;
   final CurrencyApiService _apiService;
 
+  /// Tasas tal como las devolvió la API (unidades de cada divisa por 1 USD).
+  Map<String, double> _apiRates = {'USD': 1.0};
+
+  /// Tasas manuales del usuario (por ejemplo dólar paralelo). Pisan a las
+  /// de la API solo para esa divisa.
+  Map<String, double> _manualRates = {};
+
+  /// Tasas efectivas = API + manuales. Es lo que usa `convert`.
   Map<String, double> _rates = {'USD': 1.0};
   bool _isLoading = false;
   String? _errorMessage;
@@ -18,6 +27,8 @@ class CurrencyProvider extends ChangeNotifier {
   CurrencyProvider(this.settingsBox, {CurrencyApiService? apiService})
       : _apiService = apiService ?? CurrencyApiService() {
     _loadCachedRates();
+    _loadManualRates();
+    _rebuildRates();
     fetchRates();
   }
 
@@ -27,10 +38,56 @@ class CurrencyProvider extends ChangeNotifier {
   DateTime? get lastUpdated => _lastUpdated;
   bool get hasRates => _rates.length > 1;
 
+  /// Tasas manuales activas (código -> unidades por 1 USD).
+  Map<String, double> get manualRates => Map.unmodifiable(_manualRates);
+
+  /// Tasa que dio la API para [code] (sin tener en cuenta la manual).
+  double? apiRateFor(String code) => _apiRates[code];
+
+  bool isManual(String code) => _manualRates.containsKey(code);
+
+  /// `true` si las tasas de la API tienen más de 36 horas.
+  bool get isStale {
+    final DateTime? updated = _lastUpdated;
+    return updated == null || DateTime.now().difference(updated) > const Duration(hours: 36);
+  }
+
+  void _rebuildRates() {
+    _rates = {..._apiRates, ..._manualRates};
+  }
+
+  void _loadManualRates() {
+    final dynamic raw = settingsBox.get(_manualRatesKey);
+    if (raw is Map) {
+      final Map<String, double> loaded = {};
+      raw.forEach((key, value) {
+        if (value is num && value > 0) loaded[key.toString()] = value.toDouble();
+      });
+      _manualRates = loaded;
+    }
+  }
+
+  /// Fija una tasa manual: 1 USD = [unitsPerUsd] unidades de [code].
+  Future<void> setManualRate(String code, double unitsPerUsd) async {
+    if (code == 'USD' || unitsPerUsd <= 0) return;
+    _manualRates = {..._manualRates, code: unitsPerUsd};
+    _rebuildRates();
+    await settingsBox.put(_manualRatesKey, _manualRates);
+    notifyListeners();
+  }
+
+  Future<void> clearManualRate(String code) async {
+    if (!_manualRates.containsKey(code)) return;
+    _manualRates = Map.of(_manualRates)..remove(code);
+    _rebuildRates();
+    await settingsBox.put(_manualRatesKey, _manualRates);
+    notifyListeners();
+  }
+
   void _loadCachedRates() {
     final dynamic cached = settingsBox.get(_cachedRatesKey);
     if (cached is Map) {
-      _rates = cached.map(
+      _apiRates = cached.map(
         (key, value) => MapEntry(key.toString(), (value as num).toDouble()),
       );
     }
@@ -41,7 +98,7 @@ class CurrencyProvider extends ChangeNotifier {
   }
 
   Future<void> _cacheRates() async {
-    await settingsBox.put(_cachedRatesKey, _rates);
+    await settingsBox.put(_cachedRatesKey, _apiRates);
     if (_lastUpdated != null) {
       await settingsBox.put(
         _cachedUpdatedAtKey,
@@ -76,7 +133,8 @@ class CurrencyProvider extends ChangeNotifier {
 
     try {
       final CurrencyRatesResult result = await _apiService.fetchLatestRates();
-      _rates = result.rates;
+      _apiRates = result.rates;
+      _rebuildRates();
       _lastUpdated = result.updatedAt;
       await _cacheRates();
     } on CurrencyApiException catch (e) {

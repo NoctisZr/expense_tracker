@@ -53,6 +53,10 @@ class ExpenseListItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final Color color = categoryColor(expense.category);
+    final String localCurrency = context.watch<FinanceProvider>().localCurrency;
+    final bool showHistoricalLocal = expense.localAmount != null &&
+        expense.localCurrencyAtCreation == localCurrency &&
+        expense.currency != localCurrency;
 
     return InkWell(
       onTap: onTap ?? () => showEditExpenseDialog(context, expense),
@@ -77,21 +81,45 @@ class ExpenseListItem extends StatelessWidget {
                   style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
                 ),
                 Text(
-                  locale.t(categoryLabelKey(expense.category)),
+                  '${locale.t(categoryLabelKey(expense.category))} · ${formatDateShort(expense.date)}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.bodySmall,
                 ),
+                if (expense.note != null && expense.note!.isNotEmpty)
+                  Text(
+                    expense.note!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall?.copyWith(fontStyle: FontStyle.italic),
+                  ),
               ],
             ),
           ),
           Flexible(
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerRight,
-              child: Text(
-                formatCurrency(expense.amount, expense.currency),
-                maxLines: 1,
-                style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold),
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerRight,
+                  child: Text(
+                    formatCurrency(expense.amount, expense.currency),
+                    maxLines: 1,
+                    style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold),
+                  ),
+                ),
+                if (showHistoricalLocal)
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerRight,
+                    child: Text(
+                      '≈ ${formatCurrency(expense.localAmount!, localCurrency)}',
+                      maxLines: 1,
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ),
+              ],
             ),
           ),
           IconButton(

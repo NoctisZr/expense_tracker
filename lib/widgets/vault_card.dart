@@ -50,7 +50,7 @@ class VaultCard extends StatelessWidget {
         color: extras.cornerAccentColor,
         child: Material(
           color: theme.colorScheme.surfaceContainerHighest,
-          shape: shapeBorderFor(extras.cardShapeKey, extras.cardRadius - 2),
+          shape: containerShapeBorderFor(extras.cardShapeKey, extras.cardRadius - 2),
           clipBehavior: Clip.antiAlias,
           child: Container(
             width: double.infinity,

@@ -8,6 +8,7 @@ import '../utils/app_theme_extension.dart';
 import '../utils/formatters.dart';
 import '../utils/mod_shapes.dart';
 import '../utils/savings_projection.dart';
+import 'vault_dialogs.dart';
 
 Future<void> showVaultDetailsSheet(BuildContext context, {required Vault vault}) {
   return showModalBottomSheet(
@@ -71,6 +72,12 @@ class _VaultDetailsSheet extends StatelessWidget {
                         style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
                       ),
                     ),
+                    IconButton(
+                      onPressed: () => showCreateVaultDialog(context, existing: vault),
+                      icon: const Icon(Icons.edit_outlined, size: 20),
+                      tooltip: locale.t('editar_boveda'),
+                      visualDensity: VisualDensity.compact,
+                    ),
                     TextButton(
                       onPressed: () => Navigator.of(context).pop(),
                       child: Text(locale.t('cerrar')),
@@ -79,6 +86,10 @@ class _VaultDetailsSheet extends StatelessWidget {
                 ),
                 const SizedBox(height: 16),
                 _ProjectionSection(vault: vault, projection: projection, locale: locale),
+                if (vault.targetDate != null && !projection.goalReached) ...[
+                  const SizedBox(height: 12),
+                  _DeadlineSection(vault: vault, locale: locale),
+                ],
                 const SizedBox(height: 26),
                 Text(
                   locale.t('historial_aportes'),
@@ -99,6 +110,49 @@ class _VaultDetailsSheet extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+/// Cuánto hay que ahorrar al mes/semana para llegar a la fecha límite.
+class _DeadlineSection extends StatelessWidget {
+  final Vault vault;
+  final LocaleProvider locale;
+
+  const _DeadlineSection({required this.vault, required this.locale});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final DateTime target = vault.targetDate!;
+    final double remaining = vault.targetAmount - vault.currentAmount;
+    final int daysLeft = target.difference(DateTime.now()).inDays;
+
+    final String text;
+    if (daysLeft <= 0) {
+      text = '${locale.t('fecha_meta')}: ${formatDateShort(target)} · ${locale.t('fecha_meta_vencida')}';
+    } else {
+      final double perMonth = remaining / (daysLeft / 30.4);
+      final double perWeek = remaining / (daysLeft / 7);
+      text = '${locale.t('fecha_meta')}: ${formatDateShort(target)}\n'
+          '${locale.t('necesitas_ahorrar')} ${formatCurrency(perMonth, vault.currency)} '
+          '${locale.t('al_mes')} (${formatCurrency(perWeek, vault.currency)} ${locale.t('a_la_semana')})';
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: theme.colorScheme.primary.withValues(alpha: 0.5)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.event_available_rounded, color: theme.colorScheme.primary),
+          const SizedBox(width: 12),
+          Expanded(child: Text(text, style: theme.textTheme.bodyMedium)),
+        ],
+      ),
     );
   }
 }

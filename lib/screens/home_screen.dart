@@ -5,8 +5,10 @@ import '../providers/currency_provider.dart';
 import '../providers/finance_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/theme_provider.dart';
+import '../services/backup_service.dart';
 import '../utils/app_theme_extension.dart';
 import '../widgets/mod_overlay.dart';
+import '../widgets/onboarding_dialog.dart';
 import 'converter_screen.dart';
 import 'dashboard_screen.dart';
 import 'settings_screen.dart';
@@ -38,6 +40,45 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _maybeShowOnboarding();
+      _runAutoBackupIfDue();
+    });
+  }
+
+  /// La bienvenida solo se muestra en una instalación nueva (sin datos). A
+  /// quien actualiza desde una versión anterior (ya tiene datos) se le
+  /// marca como vista sin mostrarla.
+  Future<void> _maybeShowOnboarding() async {
+    if (!mounted) return;
+    final finance = context.read<FinanceProvider>();
+    if (finance.settingsBox.get('onboardingDone') == true) return;
+    final bool hasData = finance.expensesBox.isNotEmpty ||
+        finance.incomesBox.isNotEmpty ||
+        finance.vaultsBox.isNotEmpty;
+    await finance.settingsBox.put('onboardingDone', true);
+    if (hasData || !mounted) return;
+    await showOnboardingDialog(context);
+  }
+
+  /// Respaldo automático local (máximo uno cada 7 días por espacio de
+  /// trabajo, y solo si hay datos). Se guardan los últimos 5.
+  Future<void> _runAutoBackupIfDue() async {
+    if (!mounted) return;
+    final finance = context.read<FinanceProvider>();
+    final String key = 'lastAutoBackup_${finance.activeWorkspaceId}';
+    final DateTime? last = DateTime.tryParse((finance.settingsBox.get(key) as String?) ?? '');
+    if (last != null && DateTime.now().difference(last) < const Duration(days: 7)) return;
+    final bool hasData = finance.expensesBox.isNotEmpty ||
+        finance.incomesBox.isNotEmpty ||
+        finance.vaultsBox.isNotEmpty;
+    if (!hasData) return;
+    try {
+      await BackupService().writeAutoBackup(finance.activeWorkspaceId, finance.exportData());
+      await finance.settingsBox.put(key, DateTime.now().toIso8601String());
+    } catch (_) {
+      // Un fallo del respaldo automático nunca debe molestar al usuario.
+    }
   }
 
   @override
@@ -56,6 +97,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     if (finance.applyRecurringExpenses() > 0) {
       finance.notifyChanged();
     }
+    _runAutoBackupIfDue();
   }
 
   @override

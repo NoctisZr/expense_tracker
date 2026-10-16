@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../models/expense.dart';
+import '../providers/finance_provider.dart';
 import '../providers/locale_provider.dart';
 import '../utils/category_style.dart';
+import 'category_dialogs.dart';
 
-/// Fila con las 4 categorías fijas de gasto como chips seleccionables.
+/// Fila con las categorías de gasto (4 integradas + las propias del
+/// usuario) como chips seleccionables, más un chip "+" para crear otra.
 class CategorySelectorRow extends StatelessWidget {
   final String selected;
   final ValueChanged<String> onChanged;
@@ -18,20 +22,36 @@ class CategorySelectorRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Se observa FinanceProvider para redibujar al crear/borrar categorías.
+    context.watch<FinanceProvider>();
+    final Color hint = Theme.of(context).hintColor;
+
     return Wrap(
       spacing: 8,
       runSpacing: 8,
-      children: ExpenseCategory.all.map((cat) {
-        final bool isSelected = cat == selected;
-        final Color color = categoryColor(cat);
-        return CategoryChip(
-          icon: categoryIcon(cat),
-          label: locale.t(categoryLabelKey(cat)),
-          selected: isSelected,
-          color: color,
-          onTap: () => onChanged(cat),
-        );
-      }).toList(),
+      children: [
+        ...ExpenseCategory.all.map((cat) {
+          final bool isSelected = cat == selected;
+          final Color color = categoryColor(cat);
+          return CategoryChip(
+            icon: categoryIcon(cat),
+            label: locale.t(categoryLabelKey(cat)),
+            selected: isSelected,
+            color: color,
+            onTap: () => onChanged(cat),
+          );
+        }),
+        CategoryChip(
+          icon: Icons.add_rounded,
+          label: locale.t('nueva_categoria'),
+          selected: false,
+          color: hint,
+          onTap: () async {
+            final String? created = await showAddCategoryDialog(context);
+            if (created != null) onChanged(created);
+          },
+        ),
+      ],
     );
   }
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/expense.dart';
+import '../providers/currency_provider.dart';
 import '../providers/finance_provider.dart';
 import '../providers/locale_provider.dart';
 import '../utils/formatters.dart';
@@ -27,6 +28,7 @@ class _EditExpenseDialog extends StatefulWidget {
 class _EditExpenseDialogState extends State<_EditExpenseDialog> {
   late final TextEditingController _nameController;
   late final TextEditingController _amountController;
+  late final TextEditingController _noteController;
   late String _currency;
   late String _category;
   late DateTime _date;
@@ -37,6 +39,7 @@ class _EditExpenseDialogState extends State<_EditExpenseDialog> {
     _nameController = TextEditingController(text: widget.expense.name);
     _amountController =
         TextEditingController(text: widget.expense.amount.toStringAsFixed(2));
+    _noteController = TextEditingController(text: widget.expense.note ?? '');
     _currency = widget.expense.currency;
     _category = widget.expense.category;
     _date = widget.expense.date;
@@ -46,6 +49,7 @@ class _EditExpenseDialogState extends State<_EditExpenseDialog> {
   void dispose() {
     _nameController.dispose();
     _amountController.dispose();
+    _noteController.dispose();
     super.dispose();
   }
 
@@ -73,14 +77,37 @@ class _EditExpenseDialogState extends State<_EditExpenseDialog> {
       );
       return;
     }
-    context.read<FinanceProvider>().updateExpense(
-          id: widget.expense.id,
-          name: name,
-          amount: amount,
-          currency: _currency,
-          category: _category,
-          date: _date,
-        );
+    final finance = context.read<FinanceProvider>();
+    final currencyProvider = context.read<CurrencyProvider>();
+
+    // La foto en moneda local se conserva si monto y divisa no cambiaron;
+    // si cambiaron, se recalcula con la tasa de hoy.
+    double? localAmount = widget.expense.localAmount;
+    String? localCurrencyAtCreation = widget.expense.localCurrencyAtCreation;
+    final bool changed =
+        amount != widget.expense.amount || _currency != widget.expense.currency;
+    if (changed) {
+      if (_currency != finance.localCurrency &&
+          currencyProvider.canConvert(_currency, finance.localCurrency)) {
+        localAmount = currencyProvider.convert(amount, _currency, finance.localCurrency);
+        localCurrencyAtCreation = finance.localCurrency;
+      } else {
+        localAmount = null;
+        localCurrencyAtCreation = null;
+      }
+    }
+
+    finance.updateExpense(
+      id: widget.expense.id,
+      name: name,
+      amount: amount,
+      currency: _currency,
+      category: _category,
+      date: _date,
+      note: _noteController.text,
+      localAmount: localAmount,
+      localCurrencyAtCreation: localCurrencyAtCreation,
+    );
     Navigator.of(context).pop();
   }
 
@@ -123,6 +150,12 @@ class _EditExpenseDialogState extends State<_EditExpenseDialog> {
                   onChanged: (value) => setState(() => _currency = value),
                 ),
               ],
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _noteController,
+              textCapitalization: TextCapitalization.sentences,
+              decoration: InputDecoration(labelText: locale.t('nota_opcional')),
             ),
             const SizedBox(height: 12),
             OutlinedButton.icon(

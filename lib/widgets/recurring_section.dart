@@ -10,8 +10,20 @@ import 'category_selector_row.dart';
 import 'currency_dropdown.dart';
 import 'section_card.dart';
 
-/// Gastos que se repiten cada mes (suscripciones, alquiler...). Se
-/// registran solos como gastos normales cuando llega su día de cobro.
+String _frequencyLabel(LocaleProvider locale, String frequency) {
+  switch (frequency) {
+    case RecurringExpense.weekly:
+      return locale.t('frecuencia_semanal');
+    case RecurringExpense.yearly:
+      return locale.t('frecuencia_anual');
+    case RecurringExpense.monthly:
+    default:
+      return locale.t('frecuencia_mensual');
+  }
+}
+
+/// Gastos que se repiten (suscripciones, alquiler...). Se registran solos
+/// como gastos normales cuando llega su fecha de cobro.
 class RecurringSection extends StatelessWidget {
   const RecurringSection({super.key});
 
@@ -35,7 +47,7 @@ class RecurringSection extends StatelessWidget {
                 ),
               ),
               IconButton(
-                onPressed: () => showAddRecurringDialog(context),
+                onPressed: () => showRecurringDialog(context),
                 icon: Icon(Icons.add_circle_outline_rounded, color: theme.colorScheme.primary),
                 tooltip: locale.t('agregar_recurrente'),
                 visualDensity: VisualDensity.compact,
@@ -47,59 +59,95 @@ class RecurringSection extends StatelessWidget {
             Text(locale.t('sin_recurrentes'), style: TextStyle(color: theme.hintColor))
           else
             for (final item in items)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 6),
-                child: Row(
-                  children: [
-                    CircleAvatar(
-                      radius: 18,
-                      backgroundColor: categoryColor(item.category).withValues(alpha: 0.18),
-                      child: Icon(categoryIcon(item.category),
-                          size: 18, color: categoryColor(item.category)),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            item.name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
-                          ),
-                          Text(
-                            '${locale.t('cada_mes_el_dia')} ${item.dayOfMonth}',
-                            style: theme.textTheme.bodySmall,
-                          ),
-                        ],
-                      ),
-                    ),
-                    Flexible(
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        alignment: Alignment.centerRight,
-                        child: Text(
-                          formatCurrency(item.amount, item.currency),
-                          maxLines: 1,
-                          style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                    ),
-                    IconButton(
-                      onPressed: () => _confirmDelete(context, item, locale),
-                      icon: Icon(Icons.close, size: 18, color: theme.hintColor),
-                      visualDensity: VisualDensity.compact,
-                    ),
-                  ],
-                ),
-              ),
+              _RecurringRow(item: item, locale: locale),
         ],
       ),
     );
   }
+}
 
-  void _confirmDelete(BuildContext context, RecurringExpense item, LocaleProvider locale) {
+class _RecurringRow extends StatelessWidget {
+  final RecurringExpense item;
+  final LocaleProvider locale;
+
+  const _RecurringRow({required this.item, required this.locale});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final Color color = categoryColor(item.category);
+
+    final String subtitle = item.paused
+        ? '${_frequencyLabel(locale, item.frequency)} · ${locale.t('pausado')}'
+        : '${_frequencyLabel(locale, item.frequency)} · ${locale.t('proximo_cobro')} ${formatDateShort(item.nextDue)}';
+
+    return InkWell(
+      onTap: () => showRecurringDialog(context, existing: item),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Opacity(
+          opacity: item.paused ? 0.55 : 1,
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: 18,
+                backgroundColor: color.withValues(alpha: 0.18),
+                child: Icon(categoryIcon(item.category), size: 18, color: color),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
+                    ),
+                    Text(
+                      subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+              Flexible(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerRight,
+                  child: Text(
+                    formatCurrency(item.amount, item.currency),
+                    maxLines: 1,
+                    style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+              IconButton(
+                onPressed: () => context.read<FinanceProvider>().toggleRecurringPaused(item.id),
+                icon: Icon(
+                  item.paused ? Icons.play_arrow_rounded : Icons.pause_rounded,
+                  size: 20,
+                  color: theme.hintColor,
+                ),
+                tooltip: item.paused ? locale.t('reanudar') : locale.t('pausar'),
+                visualDensity: VisualDensity.compact,
+              ),
+              IconButton(
+                onPressed: () => _confirmDelete(context),
+                icon: Icon(Icons.close, size: 18, color: theme.hintColor),
+                visualDensity: VisualDensity.compact,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _confirmDelete(BuildContext context) {
     showDialog(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -123,31 +171,41 @@ class RecurringSection extends StatelessWidget {
   }
 }
 
-Future<void> showAddRecurringDialog(BuildContext context) {
+/// Crea un gasto recurrente o, si se pasa [existing], lo edita.
+Future<void> showRecurringDialog(BuildContext context, {RecurringExpense? existing}) {
   return showDialog(
     context: context,
-    builder: (_) => const _AddRecurringDialog(),
+    builder: (_) => _RecurringDialog(existing: existing),
   );
 }
 
-class _AddRecurringDialog extends StatefulWidget {
-  const _AddRecurringDialog();
+class _RecurringDialog extends StatefulWidget {
+  final RecurringExpense? existing;
+  const _RecurringDialog({this.existing});
 
   @override
-  State<_AddRecurringDialog> createState() => _AddRecurringDialogState();
+  State<_RecurringDialog> createState() => _RecurringDialogState();
 }
 
-class _AddRecurringDialogState extends State<_AddRecurringDialog> {
-  final TextEditingController _nameController = TextEditingController();
-  final TextEditingController _amountController = TextEditingController();
-  String _category = ExpenseCategory.servicios;
+class _RecurringDialogState extends State<_RecurringDialog> {
+  late final TextEditingController _nameController;
+  late final TextEditingController _amountController;
+  late String _category;
   late String _currency;
-  int _day = DateTime.now().day;
+  late String _frequency;
+  late DateTime _firstDue;
 
   @override
   void initState() {
     super.initState();
-    _currency = context.read<FinanceProvider>().localCurrency;
+    final RecurringExpense? e = widget.existing;
+    _nameController = TextEditingController(text: e?.name ?? '');
+    _amountController = TextEditingController(text: e == null ? '' : e.amount.toStringAsFixed(2));
+    _category = e?.category ?? ExpenseCategory.servicios;
+    _currency = e?.currency ?? context.read<FinanceProvider>().localCurrency;
+    _frequency = e?.frequency ?? RecurringExpense.monthly;
+    final DateTime now = DateTime.now();
+    _firstDue = e?.nextDue ?? DateTime(now.year, now.month, now.day);
   }
 
   @override
@@ -155,6 +213,16 @@ class _AddRecurringDialogState extends State<_AddRecurringDialog> {
     _nameController.dispose();
     _amountController.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickDate() async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _firstDue,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now().add(const Duration(days: 365 * 3)),
+    );
+    if (picked != null) setState(() => _firstDue = picked);
   }
 
   void _save() {
@@ -168,13 +236,27 @@ class _AddRecurringDialogState extends State<_AddRecurringDialog> {
       );
       return;
     }
-    context.read<FinanceProvider>().addRecurringExpense(
-          name: name,
-          amount: amount,
-          currency: _currency,
-          category: _category,
-          dayOfMonth: _day,
-        );
+    final finance = context.read<FinanceProvider>();
+    if (widget.existing == null) {
+      finance.addRecurringExpense(
+        name: name,
+        amount: amount,
+        currency: _currency,
+        category: _category,
+        frequency: _frequency,
+        firstDue: _firstDue,
+      );
+    } else {
+      finance.updateRecurringExpense(
+        id: widget.existing!.id,
+        name: name,
+        amount: amount,
+        currency: _currency,
+        category: _category,
+        frequency: _frequency,
+        nextDue: _firstDue,
+      );
+    }
     Navigator.of(context).pop();
   }
 
@@ -184,7 +266,9 @@ class _AddRecurringDialogState extends State<_AddRecurringDialog> {
     final theme = Theme.of(context);
 
     return AlertDialog(
-      title: Text(locale.t('agregar_recurrente')),
+      title: Text(widget.existing == null
+          ? locale.t('agregar_recurrente')
+          : locale.t('editar_recurrente')),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -220,25 +304,28 @@ class _AddRecurringDialogState extends State<_AddRecurringDialog> {
               ],
             ),
             const SizedBox(height: 14),
-            Row(
-              children: [
-                Expanded(child: Text(locale.t('cada_mes_el_dia'))),
-                DropdownButtonHideUnderline(
-                  child: DropdownButton<int>(
-                    value: _day,
-                    dropdownColor: theme.colorScheme.surface,
-                    items: [
-                      for (int d = 1; d <= 31; d++)
-                        DropdownMenuItem<int>(value: d, child: Text('$d')),
-                    ],
-                    onChanged: (value) {
-                      if (value != null) setState(() => _day = value);
-                    },
-                  ),
-                ),
-              ],
+            SizedBox(
+              width: double.infinity,
+              child: SegmentedButton<String>(
+                showSelectedIcon: false,
+                segments: [
+                  for (final f in RecurringExpense.frequencies)
+                    ButtonSegment<String>(
+                      value: f,
+                      label: Text(_frequencyLabel(locale, f), style: const TextStyle(fontSize: 12)),
+                    ),
+                ],
+                selected: {_frequency},
+                onSelectionChanged: (selection) => setState(() => _frequency = selection.first),
+              ),
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: _pickDate,
+              icon: const Icon(Icons.event_rounded, size: 18),
+              label: Text('${locale.t('primer_cobro')}: ${formatDateShort(_firstDue)}'),
+            ),
+            const SizedBox(height: 8),
             Text(locale.t('recurrente_ayuda'), style: theme.textTheme.bodySmall),
           ],
         ),

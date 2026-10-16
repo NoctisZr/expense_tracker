@@ -46,6 +46,9 @@ jobs:
       - name: Analizar el código (informativo, no bloquea el build)
         run: flutter analyze || true
 
+      - name: Pruebas unitarias (informativo, no bloquea el build)
+        run: flutter test || true
+
       - name: Compilar el APK en modo release
         run: flutter build apk --release
 

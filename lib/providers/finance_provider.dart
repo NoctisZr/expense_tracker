@@ -6,9 +6,26 @@ import '../models/income.dart';
 import '../models/recurring_expense.dart';
 import '../models/vault.dart';
 import '../models/vault_transaction.dart';
+import '../providers/currency_provider.dart';
+import '../utils/category_registry.dart';
 import '../models/workspace.dart';
 import '../utils/currency_list.dart';
 import '../utils/id_generator.dart';
+
+/// Un gasto en la papelera junto con la fecha en que se eliminó.
+class TrashedExpense {
+  final Expense expense;
+  final DateTime deletedAt;
+
+  const TrashedExpense({required this.expense, required this.deletedAt});
+
+  /// Días que faltan para que se borre definitivamente.
+  int get daysLeft {
+    final int elapsed = DateTime.now().difference(deletedAt).inDays;
+    final int left = FinanceProvider.trashRetentionDays - elapsed;
+    return left < 0 ? 0 : left;
+  }
+}
 
 /// Las cuatro cajas de Hive que componen un espacio de trabajo.
 class _WorkspaceBoxes {
@@ -32,6 +49,14 @@ class FinanceProvider extends ChangeNotifier {
   static const String _activeWorkspaceKey = 'activeWorkspace';
   static const String _budgetsKeyPrefix = 'budgets_';
   static const String _recurringKeyPrefix = 'recurring_';
+  static const String _trashKeyPrefix = 'trash_';
+  static const String _customCategoriesKey = 'customCategories';
+  static const String _historicalRatesKey = 'useHistoricalRates';
+  static const String schemaVersionKey = 'schemaVersion';
+  static const int currentSchemaVersion = 2;
+
+  /// Días que un gasto eliminado permanece en la papelera.
+  static const int trashRetentionDays = 30;
 
   static const String _expensesBase = 'expenses_box';
   static const String _incomesBase = 'incomes_box';
@@ -48,6 +73,7 @@ class FinanceProvider extends ChangeNotifier {
   late String _workspaceId;
   late List<Workspace> _workspaces;
   late String _localCurrency;
+  late bool _useHistoricalRates;
 
   FinanceProvider._({
     required this.settingsBox,
@@ -60,16 +86,25 @@ class FinanceProvider extends ChangeNotifier {
     _workspaceId = workspaceId;
     _workspaces = _readWorkspaces(settingsBox);
 
-    final dynamic storedCurrency = settingsBox.get(_localCurrencyKey);
-    if (storedCurrency is String) {
-      _localCurrency = storedCurrency;
-    } else {
-      // Primer arranque: se deduce la moneda del idioma/región del teléfono.
-      _localCurrency = detectCurrencyFromLocale();
-      settingsBox.put(_localCurrencyKey, _localCurrency);
-    }
+    _localCurrency = _readLocalCurrency(workspaceId);
+    _useHistoricalRates = settingsBox.get(_historicalRatesKey, defaultValue: false) as bool;
+    _loadCustomCategories();
+    settingsBox.put(schemaVersionKey, currentSchemaVersion);
 
+    purgeOldTrash();
     applyRecurringExpenses();
+  }
+
+  /// Moneda local del espacio: la propia del espacio, o (para espacios
+  /// antiguos) la global; en el primer arranque, la deducida del teléfono.
+  String _readLocalCurrency(String workspaceId) {
+    final dynamic perWorkspace = settingsBox.get('${_localCurrencyKey}_$workspaceId');
+    if (perWorkspace is String) return perWorkspace;
+    final dynamic global = settingsBox.get(_localCurrencyKey);
+    if (global is String) return global;
+    final String detected = detectCurrencyFromLocale();
+    settingsBox.put(_localCurrencyKey, detected);
+    return detected;
   }
 
   /// Abre las cajas del espacio activo y crea el provider.
@@ -150,7 +185,9 @@ class FinanceProvider extends ChangeNotifier {
     vaultsBox = boxes.vaults;
     vaultTransactionsBox = boxes.vaultTransactions;
     _workspaceId = id;
+    _localCurrency = _readLocalCurrency(id);
     await settingsBox.put(_activeWorkspaceKey, id);
+    purgeOldTrash();
     applyRecurringExpenses();
     notifyListeners();
   }
@@ -161,6 +198,8 @@ class FinanceProvider extends ChangeNotifier {
     final String id = 'ws${DateTime.now().millisecondsSinceEpoch}';
     _workspaces = [..._workspaces, Workspace(id: id, name: cleanName)];
     await _saveWorkspaces();
+    // El espacio nuevo hereda la moneda local actual (luego se puede cambiar).
+    await settingsBox.put('${_localCurrencyKey}_$id', _localCurrency);
     await switchWorkspace(id);
   }
 
@@ -184,6 +223,8 @@ class FinanceProvider extends ChangeNotifier {
     }
     await settingsBox.delete('$_budgetsKeyPrefix$id');
     await settingsBox.delete('$_recurringKeyPrefix$id');
+    await settingsBox.delete('$_trashKeyPrefix$id');
+    await settingsBox.delete('${_localCurrencyKey}_$id');
     _workspaces = _workspaces.where((w) => w.id != id).toList();
     await _saveWorkspaces();
     notifyListeners();
@@ -197,7 +238,7 @@ class FinanceProvider extends ChangeNotifier {
 
   void setLocalCurrency(String currency) {
     _localCurrency = currency;
-    settingsBox.put(_localCurrencyKey, currency);
+    settingsBox.put('${_localCurrencyKey}_$_workspaceId', currency);
     notifyListeners();
   }
 
@@ -220,6 +261,113 @@ class FinanceProvider extends ChangeNotifier {
   }
 
   // ---------------------------------------------------------------------
+  // Tarifas de envío guardadas (globales, comunes a todos los espacios)
+  // ---------------------------------------------------------------------
+
+  static const String _shippingPresetsKey = 'shippingPresets';
+
+  List<Map<String, dynamic>> get shippingPresets {
+    final dynamic raw = settingsBox.get(_shippingPresetsKey);
+    final List<Map<String, dynamic>> result = [];
+    if (raw is List) {
+      for (final item in raw) {
+        if (item is Map && item['name'] is String && item['rate'] is num) {
+          result.add(Map<String, dynamic>.from(item));
+        }
+      }
+    }
+    return result;
+  }
+
+  void saveShippingPresets(List<Map<String, dynamic>> presets) {
+    settingsBox.put(_shippingPresetsKey, presets);
+    notifyListeners();
+  }
+
+  // ---------------------------------------------------------------------
+  // Tasas históricas
+  // ---------------------------------------------------------------------
+
+  /// Si es `true`, los totales usan el equivalente guardado el día en que
+  /// se registró cada gasto (cuando existe) en vez de la tasa de hoy.
+  bool get useHistoricalRates => _useHistoricalRates;
+
+  void setUseHistoricalRates(bool value) {
+    _useHistoricalRates = value;
+    settingsBox.put(_historicalRatesKey, value);
+    notifyListeners();
+  }
+
+  /// Valor de un gasto en moneda local, respetando la opción de tasa
+  /// histórica.
+  double expenseLocalValue(Expense e, CurrencyProvider currency) {
+    if (_useHistoricalRates &&
+        e.localAmount != null &&
+        e.localCurrencyAtCreation == _localCurrency &&
+        e.currency != _localCurrency) {
+      return e.localAmount!;
+    }
+    return currency.convert(e.amount, e.currency, _localCurrency);
+  }
+
+  // ---------------------------------------------------------------------
+  // Categorías personalizadas
+  // ---------------------------------------------------------------------
+
+  void _loadCustomCategories() {
+    final dynamic raw = settingsBox.get(_customCategoriesKey);
+    final List<CustomCategory> list = [];
+    if (raw is List) {
+      for (final item in raw) {
+        if (item is Map) {
+          try {
+            list.add(CustomCategory.fromMap(item));
+          } catch (_) {}
+        }
+      }
+    }
+    CategoryRegistry.load(list);
+  }
+
+  Future<void> _saveCustomCategories(List<CustomCategory> list) async {
+    CategoryRegistry.load(list);
+    await settingsBox.put(_customCategoriesKey, list.map((c) => c.toMap()).toList());
+  }
+
+  /// Devuelve `false` si el nombre es inválido o ya existe.
+  bool addCustomCategory(String name, int iconIndex, int colorIndex) {
+    final String clean = name.trim();
+    if (clean.isEmpty || clean.length > 24) return false;
+    final String lower = clean.toLowerCase();
+    final bool taken = ExpenseCategory.all.any((c) => c.toLowerCase() == lower);
+    if (taken) return false;
+    final List<CustomCategory> list = [
+      ...CategoryRegistry.custom,
+      CustomCategory(name: clean, iconIndex: iconIndex, colorIndex: colorIndex),
+    ];
+    _saveCustomCategories(list);
+    notifyListeners();
+    return true;
+  }
+
+  /// Borra la categoría personalizada. Sus gastos del espacio activo pasan
+  /// a "Otros" para no quedar huérfanos.
+  void deleteCustomCategory(String name) {
+    final List<Expense> affected =
+        expensesBox.values.where((e) => e.category == name).toList();
+    for (final e in affected) {
+      e.category = ExpenseCategory.otros;
+      expensesBox.put(e.id, e);
+    }
+    final Map<String, double> currentBudgets = budgets..remove(name);
+    settingsBox.put(_budgetsKey, currentBudgets);
+    _saveCustomCategories(
+      CategoryRegistry.custom.where((c) => c.name != name).toList(),
+    );
+    notifyListeners();
+  }
+
+  // ---------------------------------------------------------------------
   // Gastos
   // ---------------------------------------------------------------------
 
@@ -235,6 +383,8 @@ class FinanceProvider extends ChangeNotifier {
     required String currency,
     required String category,
     DateTime? date,
+    String? note,
+    double? localAmount,
   }) {
     final expense = Expense(
       id: generateId(),
@@ -243,6 +393,9 @@ class FinanceProvider extends ChangeNotifier {
       currency: currency,
       category: category,
       date: date ?? DateTime.now(),
+      note: (note == null || note.trim().isEmpty) ? null : note.trim(),
+      localAmount: localAmount,
+      localCurrencyAtCreation: localAmount == null ? null : _localCurrency,
     );
     expensesBox.put(expense.id, expense);
     notifyListeners();
@@ -255,6 +408,9 @@ class FinanceProvider extends ChangeNotifier {
     required String currency,
     required String category,
     required DateTime date,
+    String? note,
+    double? localAmount,
+    String? localCurrencyAtCreation,
   }) {
     if (!expensesBox.containsKey(id)) return;
     expensesBox.put(
@@ -266,14 +422,106 @@ class FinanceProvider extends ChangeNotifier {
         currency: currency,
         category: category,
         date: date,
+        note: (note == null || note.trim().isEmpty) ? null : note.trim(),
+        localAmount: localAmount,
+        localCurrencyAtCreation: localCurrencyAtCreation,
       ),
     );
     notifyListeners();
   }
 
+  /// Mueve el gasto a la papelera (se conserva 30 días).
   void deleteExpense(String id) {
+    final Expense? expense = expensesBox.get(id);
+    if (expense != null) {
+      final List<Map<String, dynamic>> raw = _readTrashRaw();
+      raw.add({
+        'expense': expense.toJson(),
+        'deletedAt': DateTime.now().toIso8601String(),
+      });
+      settingsBox.put(_trashKey, raw);
+    }
     expensesBox.delete(id);
     notifyListeners();
+  }
+
+  /// Registra de una vez muchos gastos (importación de CSV).
+  int addImportedExpenses(List<Expense> imported) {
+    for (final e in imported) {
+      expensesBox.put(e.id, e);
+    }
+    notifyListeners();
+    return imported.length;
+  }
+
+  // ---------------------------------------------------------------------
+  // Papelera
+  // ---------------------------------------------------------------------
+
+  String get _trashKey => '$_trashKeyPrefix$_workspaceId';
+
+  List<Map<String, dynamic>> _readTrashRaw() {
+    final dynamic raw = settingsBox.get(_trashKey);
+    final List<Map<String, dynamic>> result = [];
+    if (raw is List) {
+      for (final item in raw) {
+        if (item is Map && item['expense'] is Map && item['deletedAt'] is String) {
+          result.add({
+            'expense': Map<String, dynamic>.from(item['expense'] as Map),
+            'deletedAt': item['deletedAt'] as String,
+          });
+        }
+      }
+    }
+    return result;
+  }
+
+  List<TrashedExpense> get trashedExpenses {
+    final List<TrashedExpense> result = [];
+    for (final item in _readTrashRaw()) {
+      try {
+        result.add(TrashedExpense(
+          expense: Expense.fromJson(item['expense'] as Map<String, dynamic>),
+          deletedAt: DateTime.parse(item['deletedAt'] as String),
+        ));
+      } catch (_) {}
+    }
+    result.sort((a, b) => b.deletedAt.compareTo(a.deletedAt));
+    return result;
+  }
+
+  void restoreFromTrash(String expenseId) {
+    final List<Map<String, dynamic>> raw = _readTrashRaw();
+    Map<String, dynamic>? found;
+    for (final item in raw) {
+      if ((item['expense'] as Map<String, dynamic>)['id'] == expenseId) {
+        found = item;
+        break;
+      }
+    }
+    if (found == null) return;
+    final Expense expense = Expense.fromJson(found['expense'] as Map<String, dynamic>);
+    expensesBox.put(expense.id, expense);
+    raw.remove(found);
+    settingsBox.put(_trashKey, raw);
+    notifyListeners();
+  }
+
+  void emptyTrash() {
+    settingsBox.delete(_trashKey);
+    notifyListeners();
+  }
+
+  /// Borra definitivamente lo que lleva más de 30 días en la papelera.
+  void purgeOldTrash() {
+    final List<Map<String, dynamic>> raw = _readTrashRaw();
+    if (raw.isEmpty) return;
+    final DateTime limit = DateTime.now().subtract(const Duration(days: trashRetentionDays));
+    final List<Map<String, dynamic>> kept = raw.where((item) {
+      final DateTime? when = DateTime.tryParse(item['deletedAt'] as String);
+      return when != null && when.isAfter(limit);
+    }).toList();
+    if (kept.length != raw.length) settingsBox.put(_trashKey, kept);
   }
 
   Map<String, double> totalExpensesByCurrency() {
@@ -383,18 +631,16 @@ class FinanceProvider extends ChangeNotifier {
     await settingsBox.put(_recurringKey, list.map((r) => r.toMap()).toList());
   }
 
-  /// El primer cargo se registra en la PRÓXIMA fecha de cobro: si el día
-  /// elegido ya pasó (o es hoy), empieza el mes siguiente.
+  /// Registra un gasto recurrente. El primer cobro cae en [firstDue]; si esa
+  /// fecha ya pasó, se crean enseguida los cobros atrasados hasta hoy.
   void addRecurringExpense({
     required String name,
     required double amount,
     required String currency,
     required String category,
-    required int dayOfMonth,
+    required String frequency,
+    required DateTime firstDue,
   }) {
-    final DateTime now = DateTime.now();
-    final int currentMonth = RecurringExpense.monthIndex(now);
-    final int lastGenerated = dayOfMonth <= now.day ? currentMonth : currentMonth - 1;
     final List<RecurringExpense> list = recurringExpenses
       ..add(RecurringExpense(
         id: generateId(),
@@ -402,9 +648,58 @@ class FinanceProvider extends ChangeNotifier {
         amount: amount,
         currency: currency,
         category: category,
-        dayOfMonth: dayOfMonth.clamp(1, 31).toInt(),
-        lastGeneratedMonth: lastGenerated,
+        frequency: frequency,
+        dayOfMonth: firstDue.day,
+        paused: false,
+        nextDue: DateTime(firstDue.year, firstDue.month, firstDue.day, 9),
       ));
+    _saveRecurring(list);
+    applyRecurringExpenses();
+    notifyListeners();
+  }
+
+  void updateRecurringExpense({
+    required String id,
+    required String name,
+    required double amount,
+    required String currency,
+    required String category,
+    required String frequency,
+    required DateTime nextDue,
+  }) {
+    final List<RecurringExpense> list = recurringExpenses
+        .map((r) => r.id == id
+            ? r.copyWith(
+                name: name,
+                amount: amount,
+                currency: currency,
+                category: category,
+                frequency: frequency,
+                dayOfMonth: nextDue.day,
+                nextDue: DateTime(nextDue.year, nextDue.month, nextDue.day, 9),
+              )
+            : r)
+        .toList();
+    _saveRecurring(list);
+    applyRecurringExpenses();
+    notifyListeners();
+  }
+
+  /// Pausa o reanuda. Al reanudar no se crean cobros del periodo pausado:
+  /// se salta directamente a la próxima fecha futura.
+  void toggleRecurringPaused(String id) {
+    final DateTime now = DateTime.now();
+    final List<RecurringExpense> list = recurringExpenses.map((r) {
+      if (r.id != id) return r;
+      if (!r.paused) return r.copyWith(paused: true);
+      DateTime due = r.nextDue;
+      int guard = 0;
+      while (!due.isAfter(now) && guard < 400) {
+        due = RecurringExpense.advance(due, r.frequency, r.dayOfMonth);
+        guard++;
+      }
+      return r.copyWith(paused: false, nextDue: due);
+    }).toList();
     _saveRecurring(list);
     notifyListeners();
   }
@@ -416,48 +711,61 @@ class FinanceProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Cobros recurrentes (no pausados) que vencen en los próximos [days] días.
+  List<RecurringExpense> recurringDueWithin(int days) {
+    final DateTime now = DateTime.now();
+    final DateTime limit = now.add(Duration(days: days));
+    final List<RecurringExpense> result = recurringExpenses
+        .where((r) => !r.paused && !r.nextDue.isBefore(now) && !r.nextDue.isAfter(limit))
+        .toList()
+      ..sort((a, b) => a.nextDue.compareTo(b.nextDue));
+    return result;
+  }
+
   /// Permite a la UI pedir un refresco tras `applyRecurringExpenses()`.
   void notifyChanged() => notifyListeners();
 
-  /// Crea los gastos de los meses que ya llegaron para cada recurrente.
-  /// Devuelve cuántos gastos se generaron. No notifica: lo hace el que llama.
+  /// Crea los gastos de los cobros que ya vencieron para cada recurrente
+  /// activo. Devuelve cuántos gastos se generaron. No notifica: lo hace el
+  /// que llama.
   int applyRecurringExpenses() {
     final List<RecurringExpense> list = recurringExpenses;
     if (list.isEmpty) return 0;
 
     final DateTime now = DateTime.now();
-    final int currentMonth = RecurringExpense.monthIndex(now);
     int created = 0;
     bool changed = false;
     final List<RecurringExpense> updated = [];
 
     for (final r in list) {
-      int last = r.lastGeneratedMonth;
-      if (currentMonth - last > 24) last = currentMonth - 24;
-      int month = last + 1;
-      while (month <= currentMonth) {
-        final int year = month ~/ 12;
-        final int monthNumber = month % 12 + 1;
-        final int daysInMonth = DateTime(year, monthNumber + 1, 0).day;
-        final int day = r.dayOfMonth > daysInMonth ? daysInMonth : r.dayOfMonth;
-        final DateTime date = DateTime(year, monthNumber, day, 9);
-        if (date.isAfter(now)) break;
-        final Expense expense = Expense(
-          id: generateId(),
-          name: r.name,
-          amount: r.amount,
-          currency: r.currency,
-          category: r.category,
-          date: date,
-        );
-        expensesBox.put(expense.id, expense);
-        created++;
-        last = month;
-        month++;
+      if (r.paused) {
+        updated.add(r);
+        continue;
       }
-      if (last != r.lastGeneratedMonth) {
+      DateTime due = r.nextDue;
+      int iterations = 0;
+      int createdForItem = 0;
+      while (!due.isAfter(now) && iterations < 400) {
+        // Tope de seguridad: máximo 60 cobros atrasados por recurrente.
+        if (createdForItem < 60) {
+          final Expense expense = Expense(
+            id: generateId(),
+            name: r.name,
+            amount: r.amount,
+            currency: r.currency,
+            category: r.category,
+            date: due,
+          );
+          expensesBox.put(expense.id, expense);
+          created++;
+          createdForItem++;
+        }
+        due = RecurringExpense.advance(due, r.frequency, r.dayOfMonth);
+        iterations++;
+      }
+      if (due != r.nextDue) {
         changed = true;
-        updated.add(r.copyWith(lastGeneratedMonth: last));
+        updated.add(r.copyWith(nextDue: due));
       } else {
         updated.add(r);
       }
@@ -494,6 +802,23 @@ class FinanceProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  void updateIncome({
+    required String id,
+    required String label,
+    required double amount,
+    required String currency,
+    required DateTime date,
+  }) {
+    final Income? income = incomesBox.get(id);
+    if (income == null) return;
+    income.label = label;
+    income.amount = amount;
+    income.currency = currency;
+    income.date = date;
+    incomesBox.put(id, income);
+    notifyListeners();
+  }
+
   void deleteIncome(String id) {
     incomesBox.delete(id);
     notifyListeners();
@@ -517,6 +842,7 @@ class FinanceProvider extends ChangeNotifier {
     required String name,
     required double targetAmount,
     required String currency,
+    DateTime? targetDate,
   }) {
     final vault = Vault(
       id: generateId(),
@@ -524,8 +850,27 @@ class FinanceProvider extends ChangeNotifier {
       targetAmount: targetAmount,
       currentAmount: 0,
       currency: currency,
+      targetDate: targetDate,
     );
     vaultsBox.put(vault.id, vault);
+    notifyListeners();
+  }
+
+  /// Edita nombre, meta y fecha límite. La divisa de una bóveda no cambia
+  /// nunca (su saldo está expresado en ella). Pasar `targetDate: null`
+  /// quita la fecha límite.
+  void updateVault({
+    required String id,
+    required String name,
+    required double targetAmount,
+    DateTime? targetDate,
+  }) {
+    final Vault? vault = vaultsBox.get(id);
+    if (vault == null) return;
+    vault.name = name;
+    vault.targetAmount = targetAmount;
+    vault.targetDate = targetDate;
+    vault.save();
     notifyListeners();
   }
 
@@ -631,7 +976,7 @@ class FinanceProvider extends ChangeNotifier {
   Map<String, dynamic> exportData() {
     return {
       'exportedAt': DateTime.now().toIso8601String(),
-      'formatVersion': 2,
+      'formatVersion': 3,
       'workspaceName': activeWorkspace.name,
       'localCurrency': _localCurrency,
       'expenses': expensesBox.values.map((e) => e.toJson()).toList(),
@@ -640,6 +985,7 @@ class FinanceProvider extends ChangeNotifier {
       'vaultTransactions': vaultTransactionsBox.values.map((t) => t.toJson()).toList(),
       'budgets': budgets,
       'recurring': recurringExpenses.map((r) => r.toMap()).toList(),
+      'customCategories': CategoryRegistry.custom.map((c) => c.toMap()).toList(),
     };
   }
 
@@ -667,60 +1013,87 @@ class FinanceProvider extends ChangeNotifier {
     return buffer.toString();
   }
 
-  Future<void> importData(Map<String, dynamic> data) async {
-    await expensesBox.clear();
-    await incomesBox.clear();
-    await vaultsBox.clear();
-    await vaultTransactionsBox.clear();
+  /// Importa un respaldo. Con [merge] = false reemplaza TODO el contenido
+  /// del espacio activo; con [merge] = true suma lo del archivo a lo que ya
+  /// hay (los registros con el mismo id se actualizan, el resto se conserva).
+  Future<void> importData(Map<String, dynamic> data, {bool merge = false}) async {
+    if (!merge) {
+      await expensesBox.clear();
+      await incomesBox.clear();
+      await vaultsBox.clear();
+      await vaultTransactionsBox.clear();
 
-    final String importedCurrency = (data['localCurrency'] as String?) ?? 'USD';
-    setLocalCurrency(importedCurrency);
+      final String importedCurrency = (data['localCurrency'] as String?) ?? 'USD';
+      setLocalCurrency(importedCurrency);
+    }
+
+    // Categorías personalizadas: se agregan las que falten (en ambos modos),
+    // antes que los gastos que las usan.
+    final dynamic categoriesJson = data['customCategories'];
+    if (categoriesJson is List) {
+      final List<CustomCategory> merged = List<CustomCategory>.of(CategoryRegistry.custom);
+      for (final item in categoriesJson) {
+        if (item is Map) {
+          try {
+            final CustomCategory c = CustomCategory.fromMap(item);
+            if (!merged.any((m) => m.name == c.name) &&
+                !ExpenseCategory.builtIn.contains(c.name)) {
+              merged.add(c);
+            }
+          } catch (_) {}
+        }
+      }
+      await _saveCustomCategories(merged);
+    }
 
     final List<dynamic> expensesJson = (data['expenses'] as List?) ?? [];
     for (final item in expensesJson) {
-      final expense = Expense.fromJson(item as Map<String, dynamic>);
+      final expense = Expense.fromJson(Map<String, dynamic>.from(item as Map));
       await expensesBox.put(expense.id, expense);
     }
 
     final List<dynamic> incomesJson = (data['incomes'] as List?) ?? [];
     for (final item in incomesJson) {
-      final income = Income.fromJson(item as Map<String, dynamic>);
+      final income = Income.fromJson(Map<String, dynamic>.from(item as Map));
       await incomesBox.put(income.id, income);
     }
 
     final List<dynamic> vaultsJson = (data['vaults'] as List?) ?? [];
     for (final item in vaultsJson) {
-      final vault = Vault.fromJson(item as Map<String, dynamic>);
+      final vault = Vault.fromJson(Map<String, dynamic>.from(item as Map));
       await vaultsBox.put(vault.id, vault);
     }
 
     final List<dynamic> txJson = (data['vaultTransactions'] as List?) ?? [];
     for (final item in txJson) {
-      final tx = VaultTransaction.fromJson(item as Map<String, dynamic>);
+      final tx = VaultTransaction.fromJson(Map<String, dynamic>.from(item as Map));
       await vaultTransactionsBox.put(tx.id, tx);
     }
 
-    // Presupuestos y recurrentes existen solo en respaldos formatVersion 2.
+    // Presupuestos y recurrentes existen solo en respaldos formatVersion >= 2.
     final dynamic budgetsJson = data['budgets'];
     if (budgetsJson is Map) {
-      final Map<String, double> imported = {};
+      final Map<String, double> imported = merge ? budgets : {};
       budgetsJson.forEach((key, value) {
-        if (value is num) imported[key.toString()] = value.toDouble();
+        if (value is num && (!merge || !imported.containsKey(key.toString()))) {
+          imported[key.toString()] = value.toDouble();
+        }
       });
       await settingsBox.put(_budgetsKey, imported);
     }
 
     final dynamic recurringJson = data['recurring'];
     if (recurringJson is List) {
-      final List<Map<String, dynamic>> imported = [];
+      final List<RecurringExpense> imported = merge ? recurringExpenses : [];
       for (final item in recurringJson) {
         if (item is Map) {
           try {
-            imported.add(RecurringExpense.fromMap(item).toMap());
+            final RecurringExpense r = RecurringExpense.fromMap(item);
+            if (!imported.any((x) => x.id == r.id)) imported.add(r);
           } catch (_) {}
         }
       }
-      await settingsBox.put(_recurringKey, imported);
+      await _saveRecurring(imported);
     }
 
     notifyListeners();

@@ -23,16 +23,36 @@ ShapeBorder shapeBorderFor(String? key, double radius, {BorderSide side = Border
   }
 }
 
+/// Radio máximo que usa "stadium" en contenedores de cualquier alto
+/// (tarjetas, diálogos, hojas). Una píldora real (StadiumBorder) usa la
+/// mitad del alto como radio, y en una tarjeta alta se convierte en un
+/// óvalo enorme que recorta el contenido.
+const double kStadiumContainerRadius = 32;
+
+/// Como [shapeBorderFor], pero seguro para contenedores de contenido
+/// variable (tarjetas, diálogos). "stadium" aquí es una esquina muy
+/// redondeada de radio fijo; la píldora completa queda para los botones,
+/// que son bajos.
+ShapeBorder containerShapeBorderFor(String? key, double radius, {BorderSide side = BorderSide.none}) {
+  if (key == 'stadium') {
+    return RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(kStadiumContainerRadius),
+      side: side,
+    );
+  }
+  return shapeBorderFor(key, radius, side: side);
+}
+
 /// Igual que [shapeBorderFor] pero devuelve un BorderRadius simple para
 /// los lugares que usan `Container` + `BoxDecoration`. "beveled" y
 /// "stadium" no tienen un radio equivalente exacto ahí, así que caen a
-/// un radio pequeño (beveled) o muy grande (stadium) razonable.
+/// un radio pequeño (beveled) o muy redondeado y acotado (stadium).
 BorderRadius borderRadiusApproxFor(String? key, double radius) {
   switch (key) {
     case 'beveled':
       return BorderRadius.circular(2);
     case 'stadium':
-      return BorderRadius.circular(999);
+      return BorderRadius.circular(kStadiumContainerRadius);
     case 'continuous':
     case 'rounded':
     default:

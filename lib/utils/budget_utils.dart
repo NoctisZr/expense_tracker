@@ -13,7 +13,7 @@ double monthSpentLocal(
   double total = 0;
   for (final e in finance.expensesInPeriod(start, end)) {
     if (e.category != category) continue;
-    total += currency.convert(e.amount, e.currency, finance.localCurrency);
+    total += finance.expenseLocalValue(e, currency);
   }
   return total;
 }

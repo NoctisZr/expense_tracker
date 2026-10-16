@@ -11,6 +11,7 @@ class ThemeProvider extends ChangeNotifier {
   static const String _accentColorKey = 'accentColorValue';
   static const String _modJsonKey = 'activeModJson';
   static const String _backgroundImagePathKey = 'backgroundImagePath';
+  static const String _textScaleKey = 'textScale';
 
   final Box settingsBox;
 
@@ -18,6 +19,7 @@ class ThemeProvider extends ChangeNotifier {
   late Color _accentColor;
   ModTheme? _activeMod;
   String? _backgroundImagePath;
+  double _textScale = 1.0;
 
   ThemeProvider(this.settingsBox) {
     _isDarkMode = settingsBox.get(_darkModeKey, defaultValue: true) as bool;
@@ -27,6 +29,8 @@ class ThemeProvider extends ChangeNotifier {
     ) as int;
     _accentColor = Color(storedColorValue);
     _backgroundImagePath = settingsBox.get(_backgroundImagePathKey) as String?;
+    final dynamic storedScale = settingsBox.get(_textScaleKey);
+    if (storedScale is num) _textScale = storedScale.toDouble().clamp(0.85, 1.4).toDouble();
 
     final dynamic storedMod = settingsBox.get(_modJsonKey);
     if (storedMod is Map) {
@@ -42,6 +46,15 @@ class ThemeProvider extends ChangeNotifier {
   Color get accentColor => _accentColor;
   ModTheme? get activeMod => _activeMod;
   String? get backgroundImagePath => _backgroundImagePath;
+
+  /// Multiplicador del tamaño de texto (0.85 – 1.4), sumado al del sistema.
+  double get textScale => _textScale;
+
+  void setTextScale(double value) {
+    _textScale = value.clamp(0.85, 1.4).toDouble();
+    settingsBox.put(_textScaleKey, _textScale);
+    notifyListeners();
+  }
 
   void toggleDarkMode(bool value) {
     _isDarkMode = value;

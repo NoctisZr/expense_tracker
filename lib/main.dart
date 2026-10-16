@@ -8,9 +8,11 @@ import 'models/vault_transaction.dart';
 import 'providers/currency_provider.dart';
 import 'providers/finance_provider.dart';
 import 'providers/locale_provider.dart';
+import 'providers/security_provider.dart';
 import 'providers/theme_provider.dart';
 import 'screens/home_screen.dart';
 import 'utils/app_theme.dart';
+import 'widgets/pin_widgets.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -57,6 +59,8 @@ class ExpenseTrackerApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => ThemeProvider(settingsBox)),
         ChangeNotifierProvider(create: (_) => LocaleProvider(settingsBox)),
         ChangeNotifierProvider(create: (_) => CurrencyProvider(settingsBox)),
+        // lazy: false para que el bloqueo por PIN exista desde el primer frame.
+        ChangeNotifierProvider(create: (_) => SecurityProvider(settingsBox), lazy: false),
         ChangeNotifierProvider<FinanceProvider>.value(value: financeProvider),
       ],
       child: Consumer<ThemeProvider>(
@@ -67,6 +71,17 @@ class ExpenseTrackerApp extends StatelessWidget {
             theme: buildAppTheme(isDark: false, accent: themeProvider.accentColor, mod: themeProvider.activeMod),
             darkTheme: buildAppTheme(isDark: true, accent: themeProvider.accentColor, mod: themeProvider.activeMod),
             themeMode: themeProvider.isDarkMode ? ThemeMode.dark : ThemeMode.light,
+            builder: (context, child) {
+              // Tamaño de texto del usuario multiplicado por el del sistema.
+              final MediaQueryData mq = MediaQuery.of(context);
+              final double systemScale = mq.textScaler.scale(14) / 14;
+              return MediaQuery(
+                data: mq.copyWith(
+                  textScaler: TextScaler.linear(systemScale * themeProvider.textScale),
+                ),
+                child: LockGate(child: child ?? const SizedBox.shrink()),
+              );
+            },
             home: const HomeScreen(),
           );
         },

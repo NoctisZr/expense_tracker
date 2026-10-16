@@ -20,7 +20,7 @@ class IncomeCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final extras = theme.extension<AppThemeExtras>()!;
-    final ShapeBorder shape = shapeBorderFor(extras.cardShapeKey, extras.cardRadius - 2);
+    final ShapeBorder shape = containerShapeBorderFor(extras.cardShapeKey, extras.cardRadius - 2);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),

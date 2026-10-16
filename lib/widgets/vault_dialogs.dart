@@ -9,8 +9,10 @@ import '../utils/formatters.dart';
 import 'category_selector_row.dart';
 import 'currency_dropdown.dart';
 
-Future<void> showCreateVaultDialog(BuildContext context) {
-  return showDialog(context: context, builder: (_) => const _CreateVaultDialog());
+/// Crea una bóveda o, si se pasa [existing], edita su nombre, meta y fecha
+/// límite (la divisa de una bóveda existente no se puede cambiar).
+Future<void> showCreateVaultDialog(BuildContext context, {Vault? existing}) {
+  return showDialog(context: context, builder: (_) => _CreateVaultDialog(existing: existing));
 }
 
 Future<void> showVaultFundDialog(
@@ -25,22 +27,40 @@ Future<void> showVaultFundDialog(
 }
 
 class _CreateVaultDialog extends StatefulWidget {
-  const _CreateVaultDialog();
+  final Vault? existing;
+  const _CreateVaultDialog({this.existing});
 
   @override
   State<_CreateVaultDialog> createState() => _CreateVaultDialogState();
 }
 
 class _CreateVaultDialogState extends State<_CreateVaultDialog> {
-  final TextEditingController _nameController = TextEditingController();
-  final TextEditingController _amountController = TextEditingController();
+  late final TextEditingController _nameController;
+  late final TextEditingController _amountController;
   late String _currency;
+  DateTime? _targetDate;
   String? _error;
 
   @override
   void initState() {
     super.initState();
-    _currency = context.read<FinanceProvider>().localCurrency;
+    final Vault? v = widget.existing;
+    _nameController = TextEditingController(text: v?.name ?? '');
+    _amountController =
+        TextEditingController(text: v == null ? '' : v.targetAmount.toStringAsFixed(2));
+    _currency = v?.currency ?? context.read<FinanceProvider>().localCurrency;
+    _targetDate = v?.targetDate;
+  }
+
+  Future<void> _pickTargetDate() async {
+    final DateTime now = DateTime.now();
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _targetDate ?? now.add(const Duration(days: 90)),
+      firstDate: now,
+      lastDate: now.add(const Duration(days: 365 * 20)),
+    );
+    if (picked != null) setState(() => _targetDate = picked);
   }
 
   @override
@@ -61,11 +81,22 @@ class _CreateVaultDialogState extends State<_CreateVaultDialog> {
       return;
     }
 
-    context.read<FinanceProvider>().addVault(
-          name: name,
-          targetAmount: amount,
-          currency: _currency,
-        );
+    final finance = context.read<FinanceProvider>();
+    if (widget.existing == null) {
+      finance.addVault(
+        name: name,
+        targetAmount: amount,
+        currency: _currency,
+        targetDate: _targetDate,
+      );
+    } else {
+      finance.updateVault(
+        id: widget.existing!.id,
+        name: name,
+        targetAmount: amount,
+        targetDate: _targetDate,
+      );
+    }
     Navigator.of(context).pop();
   }
 
@@ -74,7 +105,7 @@ class _CreateVaultDialogState extends State<_CreateVaultDialog> {
     final locale = context.watch<LocaleProvider>();
 
     return AlertDialog(
-      title: Text(locale.t('crear_boveda')),
+      title: Text(widget.existing == null ? locale.t('crear_boveda') : locale.t('editar_boveda')),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -97,10 +128,35 @@ class _CreateVaultDialogState extends State<_CreateVaultDialog> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(locale.t('divisa_objetivo')),
-                CurrencyDropdown(
-                  value: _currency,
-                  onChanged: (value) => setState(() => _currency = value),
+                if (widget.existing == null)
+                  CurrencyDropdown(
+                    value: _currency,
+                    onChanged: (value) => setState(() => _currency = value),
+                  )
+                else
+                  Text(_currency, style: const TextStyle(fontWeight: FontWeight.bold)),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _pickTargetDate,
+                    icon: const Icon(Icons.event_rounded, size: 18),
+                    label: Text(
+                      _targetDate == null
+                          ? locale.t('fecha_meta_opcional')
+                          : '${locale.t('fecha_meta')}: ${formatDateShort(_targetDate!)}',
+                    ),
+                  ),
                 ),
+                if (_targetDate != null)
+                  IconButton(
+                    onPressed: () => setState(() => _targetDate = null),
+                    icon: const Icon(Icons.close, size: 18),
+                    visualDensity: VisualDensity.compact,
+                  ),
               ],
             ),
             if (_error != null) ...[

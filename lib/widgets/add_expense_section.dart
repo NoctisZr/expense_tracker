@@ -3,9 +3,9 @@ import 'package:provider/provider.dart';
 import '../models/expense.dart';
 import '../providers/currency_provider.dart';
 import '../providers/finance_provider.dart';
+import '../providers/locale_provider.dart';
 import '../utils/budget_utils.dart';
 import '../utils/formatters.dart';
-import '../providers/locale_provider.dart';
 import 'category_selector_row.dart';
 import 'currency_dropdown.dart';
 import 'section_card.dart';
@@ -20,8 +20,10 @@ class AddExpenseSection extends StatefulWidget {
 class _AddExpenseSectionState extends State<AddExpenseSection> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _amountController = TextEditingController();
+  final TextEditingController _noteController = TextEditingController();
   String _category = ExpenseCategory.compras;
   late String _currency;
+  DateTime _date = DateTime.now();
 
   @override
   void initState() {
@@ -33,7 +35,28 @@ class _AddExpenseSectionState extends State<AddExpenseSection> {
   void dispose() {
     _nameController.dispose();
     _amountController.dispose();
+    _noteController.dispose();
     super.dispose();
+  }
+
+  bool get _isToday {
+    final DateTime now = DateTime.now();
+    return _date.year == now.year && _date.month == now.month && _date.day == now.day;
+  }
+
+  Future<void> _pickDate() async {
+    final DateTime now = DateTime.now();
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _date,
+      firstDate: DateTime(2000),
+      lastDate: now.add(const Duration(days: 366)),
+    );
+    if (picked == null) return;
+    setState(() {
+      // Se conserva la hora actual para que el orden dentro del día sea natural.
+      _date = DateTime(picked.year, picked.month, picked.day, now.hour, now.minute);
+    });
   }
 
   void _submit() {
@@ -53,16 +76,29 @@ class _AddExpenseSectionState extends State<AddExpenseSection> {
     final currencyProvider = context.read<CurrencyProvider>();
     final String addedCategory = _category;
 
+    // Foto del equivalente en moneda local con la tasa de hoy (solo si la
+    // divisa del gasto es distinta de la local y hay tasas para ambas).
+    double? localAmount;
+    if (_currency != finance.localCurrency &&
+        currencyProvider.canConvert(_currency, finance.localCurrency)) {
+      localAmount = currencyProvider.convert(amount, _currency, finance.localCurrency);
+    }
+
     finance.addExpense(
       name: name,
       amount: amount,
       currency: _currency,
       category: addedCategory,
+      date: _date,
+      note: _noteController.text,
+      localAmount: localAmount,
     );
 
     _nameController.clear();
     _amountController.clear();
+    _noteController.clear();
     FocusScope.of(context).unfocus();
+    setState(() => _date = DateTime.now());
 
     // Aviso si este gasto lleva la categoría al 80 % o más de su presupuesto.
     final double? limit = finance.budgets[addedCategory];
@@ -136,6 +172,21 @@ class _AddExpenseSectionState extends State<AddExpenseSection> {
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _noteController,
+            textCapitalization: TextCapitalization.sentences,
+            decoration: InputDecoration(labelText: locale.t('nota_opcional')),
+          ),
+          const SizedBox(height: 12),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton.icon(
+              onPressed: _pickDate,
+              icon: const Icon(Icons.calendar_today_rounded, size: 16),
+              label: Text(_isToday ? locale.t('hoy') : formatDateShort(_date)),
+            ),
           ),
         ],
       ),

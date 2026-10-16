@@ -168,3 +168,50 @@ directo (mismo API).
 - Equivalente en moneda local (≈) en cada bóveda de otra divisa.
 - Más divisas soportadas (AUD, CHF, CNY, KRW, INR, UYU, BOB, PYG, DOP,
   GTQ, CRC, PAB).
+
+
+## Novedades de la v1.2 (macro actualización)
+
+**Orden y registro rápido**
+- La pantalla principal se divide en **Resumen / Movimientos / Planificación**.
+- **Fecha** y **nota** al crear un gasto; el gasto guarda además el equivalente
+  en moneda local *del día* en que se registró.
+- **Categorías propias** (nombre, icono, color).
+- **Papelera de 30 días** (en vez de borrar para siempre) con restauración.
+- Editar **ingresos** y **bóvedas**; las bóvedas admiten **fecha meta** y
+  muestran cuánto ahorrar al mes/semana.
+- Importar respaldos en modo **fusionar** o **reemplazar**.
+
+**Seguridad y datos**
+- **PIN de 4 dígitos** (se guarda solo un hash con sal; bloqueo tras 5 errores).
+- **Respaldos automáticos** locales (cada 7 días, los últimos 5) y restauración.
+- **Importar gastos desde CSV**.
+
+**Multimoneda**
+- **Tasas manuales** (dólar paralelo, etc.) y opción de usar la **tasa del día**
+  de cada gasto en los totales.
+- Fuente de respaldo si la API principal de tasas falla.
+- **Moneda local por espacio de trabajo**.
+
+**Análisis y planificación**
+- Tendencia de 6 meses, comparación con el mes anterior, promedio diario y
+  gastos más grandes.
+- Presupuesto total, filtro por **rango de fechas** y total filtrado.
+- Recurrentes **semanales/mensuales/anuales**, con pausa y edición; aviso de
+  **próximos cobros**.
+
+**Envíos**
+- Tarifas guardadas por courier, **in/lb**, impuestos/aduana y cargos extra.
+
+**Mods y accesibilidad**
+- **Galería de mods** integrada, **aviso de bajo contraste** al cargar un mod,
+  y control de **tamaño de texto**. (Se corrigió el texto secundario de Madoka.)
+
+**Calidad**
+- Onboarding para instalaciones nuevas, pruebas unitarias y paso de tests en CI
+  (informativo, no bloquea el build).
+
+### Fuera de alcance de esta versión
+iOS, sincronización en la nube / compartir espacios, huella dactilar, notificaciones
+push, widget de pantalla de inicio, PDF y respaldos cifrados: requieren servicios
+externos o configuración nativa que no se puede validar sin compilar.
