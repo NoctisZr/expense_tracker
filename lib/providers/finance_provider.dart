@@ -1,9 +1,12 @@
+import 'dart:io' show File;
 import 'dart:ui' show PlatformDispatcher;
 import 'package:flutter/material.dart';
 import 'package:hive/hive.dart';
 import '../models/expense.dart';
+import '../models/debt.dart';
 import '../models/income.dart';
 import '../models/recurring_expense.dart';
+import '../models/recurring_income.dart';
 import '../models/vault.dart';
 import '../models/vault_transaction.dart';
 import '../providers/currency_provider.dart';
@@ -25,6 +28,15 @@ class TrashedExpense {
     final int left = FinanceProvider.trashRetentionDays - elapsed;
     return left < 0 ? 0 : left;
   }
+}
+
+/// Próximo pago esperado: [estimated] es `true` cuando no viene de un
+/// ingreso recurrente sino del intervalo típico entre tus últimos pagos.
+class NextPayment {
+  final DateTime date;
+  final bool estimated;
+
+  const NextPayment({required this.date, required this.estimated});
 }
 
 /// Las cuatro cajas de Hive que componen un espacio de trabajo.
@@ -50,6 +62,12 @@ class FinanceProvider extends ChangeNotifier {
   static const String _budgetsKeyPrefix = 'budgets_';
   static const String _recurringKeyPrefix = 'recurring_';
   static const String _trashKeyPrefix = 'trash_';
+  static const String _recurringIncomeKeyPrefix = 'recurringIncome_';
+  static const String _debtsKeyPrefix = 'debts_';
+  static const String _budgetModeKey = 'budgetMode';
+  static const String _budgetRolloverKey = 'budgetRollover';
+  static const String lastExportKey = 'lastExportAt';
+  static const String backupNudgeSnoozeKey = 'backupNudgeSnoozedUntil';
   static const String _customCategoriesKey = 'customCategories';
   static const String _historicalRatesKey = 'useHistoricalRates';
   static const String schemaVersionKey = 'schemaVersion';
@@ -224,6 +242,8 @@ class FinanceProvider extends ChangeNotifier {
     await settingsBox.delete('$_budgetsKeyPrefix$id');
     await settingsBox.delete('$_recurringKeyPrefix$id');
     await settingsBox.delete('$_trashKeyPrefix$id');
+    await settingsBox.delete('$_recurringIncomeKeyPrefix$id');
+    await settingsBox.delete('$_debtsKeyPrefix$id');
     await settingsBox.delete('${_localCurrencyKey}_$id');
     _workspaces = _workspaces.where((w) => w.id != id).toList();
     await _saveWorkspaces();
@@ -385,6 +405,7 @@ class FinanceProvider extends ChangeNotifier {
     DateTime? date,
     String? note,
     double? localAmount,
+    String? receiptPath,
   }) {
     final expense = Expense(
       id: generateId(),
@@ -396,6 +417,7 @@ class FinanceProvider extends ChangeNotifier {
       note: (note == null || note.trim().isEmpty) ? null : note.trim(),
       localAmount: localAmount,
       localCurrencyAtCreation: localAmount == null ? null : _localCurrency,
+      receiptPath: receiptPath,
     );
     expensesBox.put(expense.id, expense);
     notifyListeners();
@@ -411,6 +433,7 @@ class FinanceProvider extends ChangeNotifier {
     String? note,
     double? localAmount,
     String? localCurrencyAtCreation,
+    String? receiptPath,
   }) {
     if (!expensesBox.containsKey(id)) return;
     expensesBox.put(
@@ -425,9 +448,39 @@ class FinanceProvider extends ChangeNotifier {
         note: (note == null || note.trim().isEmpty) ? null : note.trim(),
         localAmount: localAmount,
         localCurrencyAtCreation: localCurrencyAtCreation,
+        receiptPath: receiptPath,
       ),
     );
     notifyListeners();
+  }
+
+  /// Sugerencias de nombre a partir de tus gastos anteriores (los más
+  /// frecuentes primero).
+  List<String> suggestExpenseNames(String query, {int limit = 5}) {
+    final String q = query.trim().toLowerCase();
+    if (q.length < 2) return const [];
+    final Map<String, int> counts = {};
+    final Map<String, String> original = {};
+    for (final e in expensesBox.values) {
+      final String key = e.name.trim().toLowerCase();
+      if (key.isEmpty || !key.contains(q)) continue;
+      counts[key] = (counts[key] ?? 0) + 1;
+      original.putIfAbsent(key, () => e.name.trim());
+    }
+    final List<String> keys = counts.keys.toList()
+      ..sort((a, b) => counts[b]!.compareTo(counts[a]!));
+    return keys.take(limit).map((k) => original[k]!).toList();
+  }
+
+  /// Último gasto con exactamente ese nombre (sin distinguir mayúsculas).
+  Expense? lastExpenseNamed(String name) {
+    final String key = name.trim().toLowerCase();
+    Expense? latest;
+    for (final e in expensesBox.values) {
+      if (e.name.trim().toLowerCase() != key) continue;
+      if (latest == null || e.date.isAfter(latest.date)) latest = e;
+    }
+    return latest;
   }
 
   /// Mueve el gasto a la papelera (se conserva 30 días).
@@ -508,8 +561,20 @@ class FinanceProvider extends ChangeNotifier {
   }
 
   void emptyTrash() {
+    for (final item in _readTrashRaw()) {
+      _deleteReceiptFile((item['expense'] as Map<String, dynamic>)['receiptPath'] as String?);
+    }
     settingsBox.delete(_trashKey);
     notifyListeners();
+  }
+
+  /// Borra (si existe) la foto de una factura. Nunca lanza error.
+  void _deleteReceiptFile(String? path) {
+    if (path == null || path.isEmpty) return;
+    try {
+      final File file = File(path);
+      if (file.existsSync()) file.deleteSync();
+    } catch (_) {}
   }
 
   /// Borra definitivamente lo que lleva más de 30 días en la papelera.
@@ -521,7 +586,14 @@ class FinanceProvider extends ChangeNotifier {
       final DateTime? when = DateTime.tryParse(item['deletedAt'] as String);
       return when != null && when.isAfter(limit);
     }).toList();
-    if (kept.length != raw.length) settingsBox.put(_trashKey, kept);
+    if (kept.length != raw.length) {
+      for (final item in raw) {
+        if (!kept.contains(item)) {
+          _deleteReceiptFile((item['expense'] as Map<String, dynamic>)['receiptPath'] as String?);
+        }
+      }
+      settingsBox.put(_trashKey, kept);
+    }
   }
 
   Map<String, double> totalExpensesByCurrency() {
@@ -641,6 +713,9 @@ class FinanceProvider extends ChangeNotifier {
     required String frequency,
     required DateTime firstDue,
   }) {
+    final DateTime due = frequency == RecurringExpense.semimonthly
+        ? RecurringExpense.snapSemimonthly(firstDue)
+        : DateTime(firstDue.year, firstDue.month, firstDue.day, 9);
     final List<RecurringExpense> list = recurringExpenses
       ..add(RecurringExpense(
         id: generateId(),
@@ -649,9 +724,9 @@ class FinanceProvider extends ChangeNotifier {
         currency: currency,
         category: category,
         frequency: frequency,
-        dayOfMonth: firstDue.day,
+        dayOfMonth: due.day,
         paused: false,
-        nextDue: DateTime(firstDue.year, firstDue.month, firstDue.day, 9),
+        nextDue: due,
       ));
     _saveRecurring(list);
     applyRecurringExpenses();
@@ -667,6 +742,9 @@ class FinanceProvider extends ChangeNotifier {
     required String frequency,
     required DateTime nextDue,
   }) {
+    final DateTime due = frequency == RecurringExpense.semimonthly
+        ? RecurringExpense.snapSemimonthly(nextDue)
+        : DateTime(nextDue.year, nextDue.month, nextDue.day, 9);
     final List<RecurringExpense> list = recurringExpenses
         .map((r) => r.id == id
             ? r.copyWith(
@@ -675,8 +753,8 @@ class FinanceProvider extends ChangeNotifier {
                 currency: currency,
                 category: category,
                 frequency: frequency,
-                dayOfMonth: nextDue.day,
-                nextDue: DateTime(nextDue.year, nextDue.month, nextDue.day, 9),
+                dayOfMonth: due.day,
+                nextDue: due,
               )
             : r)
         .toList();
@@ -729,6 +807,10 @@ class FinanceProvider extends ChangeNotifier {
   /// activo. Devuelve cuántos gastos se generaron. No notifica: lo hace el
   /// que llama.
   int applyRecurringExpenses() {
+    return _applyRecurringExpensesOnly() + _applyRecurringIncomes();
+  }
+
+  int _applyRecurringExpensesOnly() {
     final List<RecurringExpense> list = recurringExpenses;
     if (list.isEmpty) return 0;
 
@@ -773,6 +855,301 @@ class FinanceProvider extends ChangeNotifier {
 
     if (changed) _saveRecurring(updated);
     return created;
+  }
+
+  // ---------------------------------------------------------------------
+  // Ingresos recurrentes (sueldo semanal, quincenal, mensual...)
+  // ---------------------------------------------------------------------
+
+  String get _recurringIncomeKey => '$_recurringIncomeKeyPrefix$_workspaceId';
+
+  List<RecurringIncome> get recurringIncomes {
+    final dynamic raw = settingsBox.get(_recurringIncomeKey);
+    final List<RecurringIncome> result = [];
+    if (raw is List) {
+      for (final item in raw) {
+        if (item is Map) {
+          try {
+            result.add(RecurringIncome.fromMap(item));
+          } catch (_) {}
+        }
+      }
+    }
+    return result;
+  }
+
+  Future<void> _saveRecurringIncomes(List<RecurringIncome> list) async {
+    await settingsBox.put(_recurringIncomeKey, list.map((r) => r.toMap()).toList());
+  }
+
+  DateTime _normalizedDue(String frequency, DateTime date) {
+    return frequency == RecurringExpense.semimonthly
+        ? RecurringExpense.snapSemimonthly(date)
+        : DateTime(date.year, date.month, date.day, 9);
+  }
+
+  /// El primer pago cae en [firstDue]; si esa fecha ya pasó, se registran
+  /// enseguida los pagos atrasados hasta hoy.
+  void addRecurringIncome({
+    required String label,
+    required double amount,
+    required String currency,
+    required String frequency,
+    required DateTime firstDue,
+  }) {
+    final DateTime due = _normalizedDue(frequency, firstDue);
+    final List<RecurringIncome> list = recurringIncomes
+      ..add(RecurringIncome(
+        id: generateId(),
+        label: label,
+        amount: amount,
+        currency: currency,
+        frequency: frequency,
+        dayOfMonth: due.day,
+        paused: false,
+        nextDue: due,
+      ));
+    _saveRecurringIncomes(list);
+    _applyRecurringIncomes();
+    notifyListeners();
+  }
+
+  void updateRecurringIncome({
+    required String id,
+    required String label,
+    required double amount,
+    required String currency,
+    required String frequency,
+    required DateTime nextDue,
+  }) {
+    final DateTime due = _normalizedDue(frequency, nextDue);
+    final List<RecurringIncome> list = recurringIncomes
+        .map((r) => r.id == id
+            ? r.copyWith(
+                label: label,
+                amount: amount,
+                currency: currency,
+                frequency: frequency,
+                dayOfMonth: due.day,
+                nextDue: due,
+              )
+            : r)
+        .toList();
+    _saveRecurringIncomes(list);
+    _applyRecurringIncomes();
+    notifyListeners();
+  }
+
+  void toggleRecurringIncomePaused(String id) {
+    final DateTime now = DateTime.now();
+    final List<RecurringIncome> list = recurringIncomes.map((r) {
+      if (r.id != id) return r;
+      if (!r.paused) return r.copyWith(paused: true);
+      DateTime due = r.nextDue;
+      int guard = 0;
+      while (!due.isAfter(now) && guard < 400) {
+        due = RecurringExpense.advance(due, r.frequency, r.dayOfMonth);
+        guard++;
+      }
+      return r.copyWith(paused: false, nextDue: due);
+    }).toList();
+    _saveRecurringIncomes(list);
+    notifyListeners();
+  }
+
+  void deleteRecurringIncome(String id) {
+    _saveRecurringIncomes(recurringIncomes.where((r) => r.id != id).toList());
+    notifyListeners();
+  }
+
+  /// Registra como ingresos los pagos recurrentes que ya vencieron. Devuelve
+  /// cuántos creó. No notifica: lo hace el que llama.
+  int _applyRecurringIncomes() {
+    final List<RecurringIncome> list = recurringIncomes;
+    if (list.isEmpty) return 0;
+
+    final DateTime now = DateTime.now();
+    int created = 0;
+    bool changed = false;
+    final List<RecurringIncome> updated = [];
+
+    for (final r in list) {
+      if (r.paused) {
+        updated.add(r);
+        continue;
+      }
+      DateTime due = r.nextDue;
+      int iterations = 0;
+      int createdForItem = 0;
+      while (!due.isAfter(now) && iterations < 400) {
+        if (createdForItem < 60) {
+          final Income income = Income(
+            id: generateId(),
+            label: r.label,
+            amount: r.amount,
+            currency: r.currency,
+            date: due,
+          );
+          incomesBox.put(income.id, income);
+          created++;
+          createdForItem++;
+        }
+        due = RecurringExpense.advance(due, r.frequency, r.dayOfMonth);
+        iterations++;
+      }
+      if (due != r.nextDue) {
+        changed = true;
+        updated.add(r.copyWith(nextDue: due));
+      } else {
+        updated.add(r);
+      }
+    }
+    if (changed) _saveRecurringIncomes(updated);
+    return created;
+  }
+
+  // ---------------------------------------------------------------------
+  // Periodo de pago, presupuesto y próximo pago
+  // ---------------------------------------------------------------------
+
+  /// 'calendar' (mes calendario) o 'pay' (periodo de pago: desde tu último
+  /// ingreso).
+  String get budgetMode =>
+      (settingsBox.get(_budgetModeKey, defaultValue: 'calendar') as String);
+
+  void setBudgetMode(String mode) {
+    settingsBox.put(_budgetModeKey, mode == 'pay' ? 'pay' : 'calendar');
+    notifyListeners();
+  }
+
+  /// Si es `true` (solo en modo calendario), lo que no gastaste de un
+  /// presupuesto el mes pasado se suma al de este mes.
+  bool get budgetRollover =>
+      (settingsBox.get(_budgetRolloverKey, defaultValue: false) as bool);
+
+  void setBudgetRollover(bool value) {
+    settingsBox.put(_budgetRolloverKey, value);
+    notifyListeners();
+  }
+
+  /// Ingreso más reciente que ya ocurrió (inicio del periodo de pago actual).
+  Income? get currentPayIncome {
+    final DateTime now = DateTime.now();
+    Income? best;
+    for (final i in incomesBox.values) {
+      if (i.date.isAfter(now)) continue;
+      if (best == null || i.date.isAfter(best.date)) best = i;
+    }
+    return best;
+  }
+
+  /// Ingreso inmediatamente anterior a [current] (inicio del periodo previo).
+  Income? previousPayIncome(Income current) {
+    Income? best;
+    for (final i in incomesBox.values) {
+      if (!i.date.isBefore(current.date)) continue;
+      if (best == null || i.date.isAfter(best.date)) best = i;
+    }
+    return best;
+  }
+
+  /// `true` si los presupuestos se miden por periodo de pago ahora mismo.
+  bool get isPayPeriodBudget => budgetMode == 'pay' && currentPayIncome != null;
+
+  /// Rango en el que se miden los presupuestos: el periodo de pago actual o
+  /// el mes calendario.
+  ({DateTime start, DateTime? end}) budgetPeriod() {
+    if (budgetMode == 'pay') {
+      final Income? current = currentPayIncome;
+      if (current != null) return (start: current.date, end: null);
+    }
+    final DateTime now = DateTime.now();
+    return (start: DateTime(now.year, now.month, 1), end: DateTime(now.year, now.month + 1, 1));
+  }
+
+  /// Próximo pago: el del ingreso recurrente más cercano o, si no hay,
+  /// una estimación con el intervalo típico entre tus últimos pagos.
+  NextPayment? nextExpectedPayment() {
+    final DateTime now = DateTime.now();
+    final DateTime today = DateTime(now.year, now.month, now.day);
+
+    DateTime? soonest;
+    for (final r in recurringIncomes) {
+      if (r.paused) continue;
+      if (soonest == null || r.nextDue.isBefore(soonest)) soonest = r.nextDue;
+    }
+    if (soonest != null) return NextPayment(date: soonest, estimated: false);
+
+    final List<Income> recent = incomes.where((i) => !i.date.isAfter(now)).take(4).toList();
+    if (recent.length < 2) return null;
+    int totalDays = 0;
+    for (int i = 0; i < recent.length - 1; i++) {
+      totalDays += recent[i].date.difference(recent[i + 1].date).inDays;
+    }
+    final double average = totalDays / (recent.length - 1);
+    if (average < 1 || average > 62) return null;
+    final DateTime expected = recent.first.date.add(Duration(days: average.round()));
+    if (DateTime(expected.year, expected.month, expected.day).isBefore(today)) return null;
+    return NextPayment(date: expected, estimated: true);
+  }
+
+  // ---------------------------------------------------------------------
+  // Deudas y préstamos
+  // ---------------------------------------------------------------------
+
+  String get _debtsKey => '$_debtsKeyPrefix$_workspaceId';
+
+  List<Debt> get debts {
+    final dynamic raw = settingsBox.get(_debtsKey);
+    final List<Debt> result = [];
+    if (raw is List) {
+      for (final item in raw) {
+        if (item is Map) {
+          try {
+            result.add(Debt.fromMap(item));
+          } catch (_) {}
+        }
+      }
+    }
+    result.sort((a, b) => b.date.compareTo(a.date));
+    return result;
+  }
+
+  Future<void> _saveDebts(List<Debt> list) async {
+    await settingsBox.put(_debtsKey, list.map((d) => d.toMap()).toList());
+  }
+
+  void addDebt({
+    required String person,
+    required double amount,
+    required String currency,
+    required bool owedToMe,
+    String? note,
+    DateTime? date,
+  }) {
+    final List<Debt> list = debts
+      ..add(Debt(
+        id: generateId(),
+        person: person,
+        amount: amount,
+        currency: currency,
+        owedToMe: owedToMe,
+        date: date ?? DateTime.now(),
+        paid: false,
+        note: (note == null || note.trim().isEmpty) ? null : note.trim(),
+      ));
+    _saveDebts(list);
+    notifyListeners();
+  }
+
+  void toggleDebtPaid(String id) {
+    _saveDebts(debts.map((d) => d.id == id ? d.copyWith(paid: !d.paid) : d).toList());
+    notifyListeners();
+  }
+
+  void deleteDebt(String id) {
+    _saveDebts(debts.where((d) => d.id != id).toList());
+    notifyListeners();
   }
 
   // ---------------------------------------------------------------------
@@ -976,7 +1353,7 @@ class FinanceProvider extends ChangeNotifier {
   Map<String, dynamic> exportData() {
     return {
       'exportedAt': DateTime.now().toIso8601String(),
-      'formatVersion': 3,
+      'formatVersion': 4,
       'workspaceName': activeWorkspace.name,
       'localCurrency': _localCurrency,
       'expenses': expensesBox.values.map((e) => e.toJson()).toList(),
@@ -986,6 +1363,8 @@ class FinanceProvider extends ChangeNotifier {
       'budgets': budgets,
       'recurring': recurringExpenses.map((r) => r.toMap()).toList(),
       'customCategories': CategoryRegistry.custom.map((c) => c.toMap()).toList(),
+      'recurringIncomes': recurringIncomes.map((r) => r.toMap()).toList(),
+      'debts': debts.map((d) => d.toMap()).toList(),
     };
   }
 
@@ -1094,6 +1473,34 @@ class FinanceProvider extends ChangeNotifier {
         }
       }
       await _saveRecurring(imported);
+    }
+
+    final dynamic recurringIncomesJson = data['recurringIncomes'];
+    if (recurringIncomesJson is List) {
+      final List<RecurringIncome> imported = merge ? recurringIncomes : [];
+      for (final item in recurringIncomesJson) {
+        if (item is Map) {
+          try {
+            final RecurringIncome r = RecurringIncome.fromMap(item);
+            if (!imported.any((x) => x.id == r.id)) imported.add(r);
+          } catch (_) {}
+        }
+      }
+      await _saveRecurringIncomes(imported);
+    }
+
+    final dynamic debtsJson = data['debts'];
+    if (debtsJson is List) {
+      final List<Debt> imported = merge ? debts : [];
+      for (final item in debtsJson) {
+        if (item is Map) {
+          try {
+            final Debt d = Debt.fromMap(item);
+            if (!imported.any((x) => x.id == d.id)) imported.add(d);
+          } catch (_) {}
+        }
+      }
+      await _saveDebts(imported);
     }
 
     notifyListeners();

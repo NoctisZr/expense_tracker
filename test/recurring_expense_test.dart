@@ -21,6 +21,25 @@ void main() {
       expect([next.year, next.month, next.day], [2027, 1, 4]);
     });
 
+    test('cada 14 días', () {
+      final next = RecurringExpense.advance(DateTime(2026, 12, 25, 9), RecurringExpense.biweekly, 25);
+      expect([next.year, next.month, next.day], [2027, 1, 8]);
+    });
+
+    test('quincenal 15 y fin de mes', () {
+      final a = RecurringExpense.advance(DateTime(2026, 2, 15, 9), RecurringExpense.semimonthly, 15);
+      expect([a.month, a.day], [2, 28]);
+      final b = RecurringExpense.advance(a, RecurringExpense.semimonthly, 28);
+      expect([b.month, b.day], [3, 15]);
+      final c = RecurringExpense.advance(DateTime(2026, 12, 31, 9), RecurringExpense.semimonthly, 31);
+      expect([c.year, c.month, c.day], [2027, 1, 15]);
+    });
+
+    test('snapSemimonthly ajusta a 15 o fin de mes', () {
+      expect(RecurringExpense.snapSemimonthly(DateTime(2026, 4, 3)).day, 15);
+      expect(RecurringExpense.snapSemimonthly(DateTime(2026, 4, 20)).day, 30);
+    });
+
     test('anual respeta el 29 de febrero', () {
       final next = RecurringExpense.advance(DateTime(2028, 2, 29, 9), RecurringExpense.yearly, 29);
       expect([next.year, next.month, next.day], [2029, 2, 28]);

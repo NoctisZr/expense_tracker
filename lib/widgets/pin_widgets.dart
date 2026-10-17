@@ -31,6 +31,21 @@ class PinLockScreen extends StatefulWidget {
 class _PinLockScreenState extends State<PinLockScreen> {
   bool _wrong = false;
 
+  @override
+  void initState() {
+    super.initState();
+    // Si la huella está activada, se pide al mostrar la pantalla de bloqueo.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _tryBiometrics());
+  }
+
+  Future<void> _tryBiometrics() async {
+    if (!mounted) return;
+    final security = context.read<SecurityProvider>();
+    final locale = context.read<LocaleProvider>();
+    if (!security.biometricEnabled) return;
+    await security.unlockWithBiometrics(locale.t('huella_motivo'));
+  }
+
   void _onPin(String pin) {
     final bool ok = context.read<SecurityProvider>().unlock(pin);
     if (!ok) setState(() => _wrong = true);
@@ -66,6 +81,14 @@ class _PinLockScreenState extends State<PinLockScreen> {
                 ),
                 const SizedBox(height: 20),
                 PinPad(onCompleted: _onPin, errorText: error, enabled: blocked == 0),
+                if (security.biometricEnabled) ...[
+                  const SizedBox(height: 12),
+                  TextButton.icon(
+                    onPressed: _tryBiometrics,
+                    icon: const Icon(Icons.fingerprint_rounded),
+                    label: Text(locale.t('usar_huella')),
+                  ),
+                ],
               ],
             ),
           ),

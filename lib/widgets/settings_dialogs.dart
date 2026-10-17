@@ -276,3 +276,26 @@ class _AutoBackupsSheetState extends State<_AutoBackupsSheet> {
     );
   }
 }
+
+/// Elegir el mes del reporte (los últimos 12). Devuelve el primer día del
+/// mes elegido o `null` si se cancela.
+Future<DateTime?> pickReportMonth(BuildContext context) {
+  final locale = context.read<LocaleProvider>();
+  final DateTime now = DateTime.now();
+  return showDialog<DateTime>(
+    context: context,
+    builder: (dialogContext) => SimpleDialog(
+      title: Text(locale.t('elige_mes')),
+      children: [
+        for (int back = 0; back < 12; back++)
+          Builder(builder: (_) {
+            final DateTime month = DateTime(now.year, now.month - back, 1);
+            return SimpleDialogOption(
+              onPressed: () => Navigator.of(dialogContext).pop(month),
+              child: Text('${month.month.toString().padLeft(2, '0')}/${month.year}'),
+            );
+          }),
+      ],
+    ),
+  );
+}

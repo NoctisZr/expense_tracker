@@ -1,7 +1,7 @@
 name: expense_tracker
 description: "Expense Tracker: dashboard de finanzas personales con bóvedas de ahorro y conversor de divisas en tiempo real."
 publish_to: 'none'
-version: 1.2.0+3
+version: 1.3.0+4
 
 environment:
   sdk: '>=3.4.0 <4.0.0'
@@ -35,6 +35,12 @@ dependencies:
   # Fondo personalizado: elegir imagen + redimensionar/desenfocar
   image_picker: ^1.1.0
   image: ^4.7.2
+
+  # Escaneo de facturas (OCR en el teléfono) y desbloqueo con huella.
+  # Cada una se usa desde UN solo archivo de lib/services; si alguna diera
+  # problemas de compilación, el workflow compila solo una versión "lite".
+  google_mlkit_text_recognition: '>=0.13.0 <0.14.0'
+  local_auth: ^2.3.0
 
 dev_dependencies:
   flutter_test:

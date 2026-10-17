@@ -75,7 +75,7 @@ class ExpenseListItem extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  expense.name,
+                  expense.receiptPath != null ? '🧾 ${expense.name}' : expense.name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600),

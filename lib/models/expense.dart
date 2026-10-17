@@ -37,6 +37,9 @@ class Expense {
   double? localAmount;
   String? localCurrencyAtCreation;
 
+  /// Ruta de la foto de la factura (copiada al almacenamiento de la app).
+  String? receiptPath;
+
   Expense({
     required this.id,
     required this.name,
@@ -47,6 +50,7 @@ class Expense {
     this.note,
     this.localAmount,
     this.localCurrencyAtCreation,
+    this.receiptPath,
   });
 
   Map<String, dynamic> toJson() => {
@@ -59,6 +63,7 @@ class Expense {
         if (note != null && note!.isNotEmpty) 'note': note,
         if (localAmount != null) 'localAmount': localAmount,
         if (localCurrencyAtCreation != null) 'localCurrencyAtCreation': localCurrencyAtCreation,
+        if (receiptPath != null) 'receiptPath': receiptPath,
       };
 
   factory Expense.fromJson(Map<String, dynamic> json) => Expense(
@@ -71,6 +76,7 @@ class Expense {
         note: json['note'] as String?,
         localAmount: (json['localAmount'] as num?)?.toDouble(),
         localCurrencyAtCreation: json['localCurrencyAtCreation'] as String?,
+        receiptPath: json['receiptPath'] as String?,
       );
 }
 
@@ -99,13 +105,15 @@ class ExpenseAdapter extends TypeAdapter<Expense> {
       note: fields[6] as String?,
       localAmount: (fields[7] as num?)?.toDouble(),
       localCurrencyAtCreation: fields[8] as String?,
+      // Campo añadido en la v1.3.
+      receiptPath: fields[9] as String?,
     );
   }
 
   @override
   void write(BinaryWriter writer, Expense obj) {
     writer
-      ..writeByte(9)
+      ..writeByte(10)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -123,6 +131,8 @@ class ExpenseAdapter extends TypeAdapter<Expense> {
       ..writeByte(7)
       ..write(obj.localAmount)
       ..writeByte(8)
-      ..write(obj.localCurrencyAtCreation);
+      ..write(obj.localCurrencyAtCreation)
+      ..writeByte(9)
+      ..write(obj.receiptPath);
   }
 }

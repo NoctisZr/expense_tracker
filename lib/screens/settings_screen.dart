@@ -15,7 +15,10 @@ import '../services/background_image_service.dart';
 import '../services/backup_service.dart';
 import '../utils/app_colors.dart';
 import '../utils/category_registry.dart';
+import '../services/biometric_service.dart';
+import '../services/report_service.dart';
 import '../utils/csv_utils.dart';
+import '../utils/xlsx_reader.dart';
 import '../utils/currency_list.dart';
 import '../widgets/category_dialogs.dart';
 import '../widgets/mod_gallery.dart';
@@ -47,6 +50,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final data = context.read<FinanceProvider>().exportData();
     try {
       await _backupService.exportAndShare(data);
+      if (mounted) {
+        await context
+            .read<FinanceProvider>()
+            .settingsBox
+            .put(FinanceProvider.lastExportKey, DateTime.now().toIso8601String());
+      }
     } catch (_) {
       _showSnack(locale.t('error_exportar'));
     }
@@ -91,15 +100,86 @@ class _SettingsScreenState extends State<SettingsScreen> {
         knownCategories: ExpenseCategory.all,
         supportedCurrencies: kSupportedCurrencies.toSet(),
       );
-      if (!result.headerRecognized || result.expenses.isEmpty) {
-        _showSnack(locale.t('csv_no_reconocido'));
-        return;
-      }
-      final int added = finance.addImportedExpenses(result.expenses);
-      _showSnack('${locale.t('csv_importado')}: $added'
-          '${result.skipped > 0 ? ' (${locale.t('csv_omitidas')}: ${result.skipped})' : ''}');
+      await _confirmAndImport(result);
     } catch (_) {
       _showSnack(locale.t('error_importar'));
+    }
+  }
+
+  Future<void> _handleImportExcel() async {
+    final locale = context.read<LocaleProvider>();
+    final finance = context.read<FinanceProvider>();
+    try {
+      final FilePickerResult? picked = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['xlsx'],
+      );
+      final String? path = picked?.files.single.path;
+      if (path == null || !mounted) return;
+      final rows = readXlsxRows(await File(path).readAsBytes());
+      final CsvImportResult result = parseExpensesRows(
+        rows,
+        defaultCurrency: finance.localCurrency,
+        knownCategories: ExpenseCategory.all,
+        supportedCurrencies: kSupportedCurrencies.toSet(),
+      );
+      await _confirmAndImport(result);
+    } on XlsxFormatException catch (e) {
+      _showSnack(e.message);
+    } catch (_) {
+      _showSnack(locale.t('error_importar'));
+    }
+  }
+
+  /// Muestra cuántos gastos se detectaron y, si el usuario confirma, los
+  /// agrega (sin tocar lo que ya existe).
+  Future<void> _confirmAndImport(CsvImportResult result) async {
+    final locale = context.read<LocaleProvider>();
+    final finance = context.read<FinanceProvider>();
+    if (!result.headerRecognized || result.expenses.isEmpty) {
+      _showSnack(locale.t('csv_no_reconocido'));
+      return;
+    }
+    final bool? ok = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(locale.t('importar_gastos_titulo')),
+        content: Text(
+          '${result.expenses.length} ${locale.t('gastos_detectados')}'
+          '${result.skipped > 0 ? '\n${result.skipped} ${locale.t('csv_omitidas')}.' : ''}',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text(locale.t('cancelar')),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text(locale.t('importar')),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    final int added = finance.addImportedExpenses(result.expenses);
+    _showSnack('${locale.t('csv_importado')}: $added');
+  }
+
+  Future<void> _handleReport() async {
+    final locale = context.read<LocaleProvider>();
+    final finance = context.read<FinanceProvider>();
+    final currency = context.read<CurrencyProvider>();
+    final DateTime? month = await pickReportMonth(context);
+    if (month == null || !mounted) return;
+    try {
+      await ReportService().shareMonthlyReport(
+        finance: finance,
+        currency: currency,
+        locale: locale,
+        month: month,
+      );
+    } catch (_) {
+      _showSnack(locale.t('error_exportar'));
     }
   }
 
@@ -311,6 +391,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     security.hasPin ? locale.t('pin_activo') : locale.t('pin_descripcion'),
                     style: theme.textTheme.bodySmall,
                   ),
+                  if (security.hasPin && BiometricService.isAvailable)
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(locale.t('desbloquear_con_huella')),
+                      value: security.biometricEnabled,
+                      onChanged: (value) async {
+                        final sec = context.read<SecurityProvider>();
+                        if (value) {
+                          final bool usable = await BiometricService().canUse();
+                          final bool ok =
+                              usable && await BiometricService().authenticate(locale.t('huella_motivo'));
+                          if (!ok) {
+                            _showSnack(locale.t('huella_no_disponible'));
+                            return;
+                          }
+                        }
+                        await sec.setBiometricEnabled(value);
+                      },
+                    ),
                   const SizedBox(height: 12),
                   Wrap(
                     spacing: 10,
@@ -336,6 +435,46 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                       ],
                     ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            SectionCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SectionLabel(locale.t('ajustes_presupuesto')),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: SegmentedButton<String>(
+                      showSelectedIcon: false,
+                      segments: [
+                        ButtonSegment(
+                          value: 'calendar',
+                          label: Text(locale.t('presupuesto_mes_calendario'), style: const TextStyle(fontSize: 12)),
+                        ),
+                        ButtonSegment(
+                          value: 'pay',
+                          label: Text(locale.t('presupuesto_periodo_pago'), style: const TextStyle(fontSize: 12)),
+                        ),
+                      ],
+                      selected: {finance.budgetMode},
+                      onSelectionChanged: (selection) =>
+                          context.read<FinanceProvider>().setBudgetMode(selection.first),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(locale.t('presupuesto_modo_ayuda'), style: theme.textTheme.bodySmall),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(locale.t('presupuesto_sobrante')),
+                    subtitle: Text(locale.t('presupuesto_sobrante_ayuda'), style: theme.textTheme.bodySmall),
+                    value: finance.budgetRollover,
+                    onChanged: finance.budgetMode == 'calendar'
+                        ? (value) => context.read<FinanceProvider>().setBudgetRollover(value)
+                        : null,
                   ),
                 ],
               ),
@@ -439,6 +578,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     onPressed: _handleImportCsv,
                     icon: const Icon(Icons.playlist_add_rounded),
                     label: Text(locale.t('importar_csv')),
+                  ),
+                  const SizedBox(height: 10),
+                  OutlinedButton.icon(
+                    onPressed: _handleImportExcel,
+                    icon: const Icon(Icons.grid_on_rounded),
+                    label: Text(locale.t('importar_excel')),
+                  ),
+                  const SizedBox(height: 10),
+                  OutlinedButton.icon(
+                    onPressed: _handleReport,
+                    icon: const Icon(Icons.picture_as_pdf_outlined),
+                    label: Text(locale.t('reporte_mensual')),
                   ),
                   const SizedBox(height: 16),
                   Wrap(

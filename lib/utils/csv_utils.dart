@@ -104,6 +104,15 @@ DateTime? parseFlexibleDate(String raw) {
   final DateTime? iso = DateTime.tryParse(s);
   if (iso != null) return iso;
 
+  // Número de serie de Excel (días desde el 30/12/1899), p. ej. 46037 o 46037.5.
+  final double? serial = double.tryParse(s);
+  if (serial != null) {
+    if (serial >= 20000 && serial <= 80000) {
+      return DateTime(1899, 12, 30).add(Duration(days: serial.floor(), hours: 12));
+    }
+    return null;
+  }
+
   final RegExpMatch? dmy = RegExp(r'^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})').firstMatch(s);
   if (dmy != null) {
     final int day = int.parse(dmy.group(1)!);
@@ -142,7 +151,22 @@ CsvImportResult parseExpensesCsv(
   required List<String> knownCategories,
   required Set<String> supportedCurrencies,
 }) {
-  final List<List<String>> rows = parseCsv(text);
+  return parseExpensesRows(
+    parseCsv(text),
+    defaultCurrency: defaultCurrency,
+    knownCategories: knownCategories,
+    supportedCurrencies: supportedCurrencies,
+  );
+}
+
+/// Igual que [parseExpensesCsv] pero a partir de filas ya separadas (sirve
+/// tanto para CSV como para hojas de Excel leídas con `readXlsxRows`).
+CsvImportResult parseExpensesRows(
+  List<List<String>> rows, {
+  required String defaultCurrency,
+  required List<String> knownCategories,
+  required Set<String> supportedCurrencies,
+}) {
   if (rows.isEmpty) {
     return const CsvImportResult(expenses: [], skipped: 0, headerRecognized: false);
   }

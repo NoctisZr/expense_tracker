@@ -8,6 +8,7 @@ import '../utils/budget_utils.dart';
 import '../utils/formatters.dart';
 import 'category_selector_row.dart';
 import 'currency_dropdown.dart';
+import 'receipt_flow.dart';
 import 'section_card.dart';
 
 class AddExpenseSection extends StatefulWidget {
@@ -21,9 +22,12 @@ class _AddExpenseSectionState extends State<AddExpenseSection> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _amountController = TextEditingController();
   final TextEditingController _noteController = TextEditingController();
+  final FocusNode _nameFocus = FocusNode();
   String _category = ExpenseCategory.compras;
   late String _currency;
   DateTime _date = DateTime.now();
+  int _splitCount = 1;
+  bool _splitCreateDebt = true;
 
   @override
   void initState() {
@@ -36,6 +40,7 @@ class _AddExpenseSectionState extends State<AddExpenseSection> {
     _nameController.dispose();
     _amountController.dispose();
     _noteController.dispose();
+    _nameFocus.dispose();
     super.dispose();
   }
 
@@ -62,10 +67,10 @@ class _AddExpenseSectionState extends State<AddExpenseSection> {
   void _submit() {
     final locale = context.read<LocaleProvider>();
     final String name = _nameController.text.trim();
-    final double? amount =
+    final double? total =
         double.tryParse(_amountController.text.trim().replaceAll(',', '.'));
 
-    if (name.isEmpty || amount == null || amount <= 0) {
+    if (name.isEmpty || total == null || total <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(locale.t('campos_gasto_invalidos'))),
       );
@@ -75,6 +80,17 @@ class _AddExpenseSectionState extends State<AddExpenseSection> {
     final finance = context.read<FinanceProvider>();
     final currencyProvider = context.read<CurrencyProvider>();
     final String addedCategory = _category;
+
+    // Gasto compartido: se registra solo TU parte y, si se desea, lo que
+    // los demás te deben queda como deuda.
+    double amount = total;
+    String note = _noteController.text.trim();
+    final int split = _splitCount;
+    if (split > 1) {
+      amount = double.parse((total / split).toStringAsFixed(2));
+      final String splitNote = '${locale.t('total_cuenta')} ${formatAmount(total)} ÷ $split';
+      note = note.isEmpty ? splitNote : '$note · $splitNote';
+    }
 
     // Foto del equivalente en moneda local con la tasa de hoy (solo si la
     // divisa del gasto es distinta de la local y hay tasas para ambas).
@@ -90,20 +106,34 @@ class _AddExpenseSectionState extends State<AddExpenseSection> {
       currency: _currency,
       category: addedCategory,
       date: _date,
-      note: _noteController.text,
+      note: note,
       localAmount: localAmount,
     );
+
+    if (split > 1 && _splitCreateDebt && total - amount > 0.009) {
+      finance.addDebt(
+        person: '${locale.t('compartido')}: $name',
+        amount: double.parse((total - amount).toStringAsFixed(2)),
+        currency: _currency,
+        owedToMe: true,
+      );
+    }
 
     _nameController.clear();
     _amountController.clear();
     _noteController.clear();
     FocusScope.of(context).unfocus();
-    setState(() => _date = DateTime.now());
+    setState(() {
+      _date = DateTime.now();
+      _splitCount = 1;
+    });
 
     // Aviso si este gasto lleva la categoría al 80 % o más de su presupuesto.
-    final double? limit = finance.budgets[addedCategory];
-    if (limit != null && limit > 0) {
-      final double spent = monthSpentLocal(finance, currencyProvider, addedCategory);
+    final double? baseLimit = finance.budgets[addedCategory];
+    if (baseLimit != null && baseLimit > 0) {
+      final double limit =
+          baseLimit + budgetCarryOver(finance, currencyProvider, addedCategory, baseLimit);
+      final double spent = periodSpentLocal(finance, currencyProvider, addedCategory);
       final double fraction = spent / limit;
       if (fraction >= 0.8) {
         final String key = fraction >= 1 ? 'alerta_presupuesto_excedido' : 'alerta_presupuesto_cerca';
@@ -128,18 +158,69 @@ class _AddExpenseSectionState extends State<AddExpenseSection> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SectionLabel(locale.t('anadir_gasto')),
-          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(child: SectionLabel(locale.t('anadir_gasto'))),
+              TextButton.icon(
+                onPressed: () => startReceiptScan(context),
+                icon: const Icon(Icons.document_scanner_outlined, size: 18),
+                label: Text(locale.t('escanear_factura')),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
           CategorySelectorRow(
             selected: _category,
             locale: locale,
             onChanged: (cat) => setState(() => _category = cat),
           ),
           const SizedBox(height: 16),
-          TextField(
-            controller: _nameController,
-            textCapitalization: TextCapitalization.sentences,
-            decoration: InputDecoration(labelText: locale.t('nombre')),
+          RawAutocomplete<String>(
+            textEditingController: _nameController,
+            focusNode: _nameFocus,
+            optionsBuilder: (TextEditingValue value) =>
+                context.read<FinanceProvider>().suggestExpenseNames(value.text),
+            onSelected: (String name) {
+              final Expense? last = context.read<FinanceProvider>().lastExpenseNamed(name);
+              if (last == null) return;
+              setState(() {
+                _category = last.category;
+                _currency = last.currency;
+                if (_amountController.text.trim().isEmpty) {
+                  _amountController.text = last.amount.toStringAsFixed(2);
+                }
+              });
+            },
+            fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) => TextField(
+              controller: controller,
+              focusNode: focusNode,
+              textCapitalization: TextCapitalization.sentences,
+              decoration: InputDecoration(labelText: locale.t('nombre')),
+              onSubmitted: (_) => onFieldSubmitted(),
+            ),
+            optionsViewBuilder: (context, onSelected, options) => Align(
+              alignment: Alignment.topLeft,
+              child: Material(
+                elevation: 4,
+                borderRadius: BorderRadius.circular(12),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 200, maxWidth: 320),
+                  child: ListView(
+                    padding: EdgeInsets.zero,
+                    shrinkWrap: true,
+                    children: [
+                      for (final option in options)
+                        ListTile(
+                          dense: true,
+                          leading: const Icon(Icons.history_rounded, size: 18),
+                          title: Text(option),
+                          onTap: () => onSelected(option),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
           ),
           const SizedBox(height: 12),
           Row(
@@ -180,14 +261,43 @@ class _AddExpenseSectionState extends State<AddExpenseSection> {
             decoration: InputDecoration(labelText: locale.t('nota_opcional')),
           ),
           const SizedBox(height: 12),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: OutlinedButton.icon(
-              onPressed: _pickDate,
-              icon: const Icon(Icons.calendar_today_rounded, size: 16),
-              label: Text(_isToday ? locale.t('hoy') : formatDateShort(_date)),
-            ),
+          Row(
+            children: [
+              OutlinedButton.icon(
+                onPressed: _pickDate,
+                icon: const Icon(Icons.calendar_today_rounded, size: 16),
+                label: Text(_isToday ? locale.t('hoy') : formatDateShort(_date)),
+              ),
+              const Spacer(),
+              Text(locale.t('dividir_entre'), style: theme.textTheme.bodyMedium),
+              const SizedBox(width: 6),
+              DropdownButtonHideUnderline(
+                child: DropdownButton<int>(
+                  value: _splitCount,
+                  dropdownColor: theme.colorScheme.surface,
+                  items: [
+                    for (int n = 1; n <= 10; n++)
+                      DropdownMenuItem<int>(
+                        value: n,
+                        child: Text(n == 1 ? locale.t('no_dividir') : '$n'),
+                      ),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) setState(() => _splitCount = value);
+                  },
+                ),
+              ),
+            ],
           ),
+          if (_splitCount > 1)
+            CheckboxListTile(
+              contentPadding: EdgeInsets.zero,
+              dense: true,
+              controlAffinity: ListTileControlAffinity.leading,
+              value: _splitCreateDebt,
+              onChanged: (value) => setState(() => _splitCreateDebt = value ?? true),
+              title: Text(locale.t('registrar_lo_que_me_deben'), style: theme.textTheme.bodySmall),
+            ),
         ],
       ),
     );

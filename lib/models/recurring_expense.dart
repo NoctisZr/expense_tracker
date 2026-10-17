@@ -8,9 +8,15 @@
 /// al leerlos.
 class RecurringExpense {
   static const String weekly = 'weekly';
+
+  /// Cada 14 días exactos.
+  static const String biweekly = 'biweekly';
+
+  /// "Quincenal" a la latinoamericana: el 15 y el último día de cada mes.
+  static const String semimonthly = 'semimonthly';
   static const String monthly = 'monthly';
   static const String yearly = 'yearly';
-  static const List<String> frequencies = [weekly, monthly, yearly];
+  static const List<String> frequencies = [weekly, biweekly, semimonthly, monthly, yearly];
 
   final String id;
   final String name;
@@ -70,6 +76,15 @@ class RecurringExpense {
     switch (frequency) {
       case weekly:
         return DateTime(due.year, due.month, due.day + 7, due.hour, due.minute);
+      case biweekly:
+        return DateTime(due.year, due.month, due.day + 14, due.hour, due.minute);
+      case semimonthly:
+        // Del 15 (o antes) se pasa al último día del mes; del último día
+        // (o después del 15) se pasa al 15 del mes siguiente.
+        if (due.day <= 15) {
+          return DateTime(due.year, due.month + 1, 0, due.hour, due.minute);
+        }
+        return DateTime(due.year, due.month + 1, 15, due.hour, due.minute);
       case yearly:
         return _clamped(due.year + 1, due.month, dayOfMonth, due);
       case monthly:
@@ -78,6 +93,13 @@ class RecurringExpense {
         final int year = month > 12 ? due.year + 1 : due.year;
         return _clamped(year, month > 12 ? 1 : month, dayOfMonth, due);
     }
+  }
+
+  /// Ajusta una fecha elegida a un día válido de la quincena: el 15 si cae
+  /// en la primera mitad del mes, o el último día del mes si cae después.
+  static DateTime snapSemimonthly(DateTime date) {
+    if (date.day <= 15) return DateTime(date.year, date.month, 15, 9);
+    return DateTime(date.year, date.month + 1, 0, 9);
   }
 
   static DateTime _clamped(int year, int month, int day, DateTime like) {

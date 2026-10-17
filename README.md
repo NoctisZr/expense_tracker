@@ -215,3 +215,33 @@ directo (mismo API).
 iOS, sincronización en la nube / compartir espacios, huella dactilar, notificaciones
 push, widget de pantalla de inicio, PDF y respaldos cifrados: requieren servicios
 externos o configuración nativa que no se puede validar sin compilar.
+
+
+## Novedades de la v1.3
+
+**Periodo de pago (semanal, quincenal, mensual)**
+- **Ingresos recurrentes** con frecuencia semanal, cada 2 semanas, quincenal
+  (15 y fin de mes), mensual o anual; con pausa y edición.
+- Los gastos recurrentes admiten las mismas frecuencias.
+- **Presupuesto por periodo de pago** (o mes calendario) y opción de **sumar el sobrante** del mes anterior.
+- Cuenta regresiva al **próximo pago** y análisis del periodo actual vs. el anterior.
+
+**Registro automático**
+- **Escanear factura**: foto o galería → lectura de texto en el teléfono (ML Kit) →
+  formulario ya rellenado para revisar y guardar. La foto queda adjunta al gasto.
+- **Importar desde Excel (.xlsx)** (y CSV) con confirmación previa.
+- **Autocompletado** de gastos según tu historial.
+
+**Más herramientas**
+- **Dividir cuentas** y **deudas y préstamos**.
+- **Reporte mensual en PDF**.
+- **Huella dactilar** (además del PIN) y **recordatorio de respaldo**.
+
+**Firma estable del APK**: ver `SIGNING.md`.
+
+**Plan B automático**: si el OCR o la huella dieran problemas de compilación, el
+workflow compila solo una versión "lite" (sin esas dos funciones) y lo indica en el
+nombre del release.
+
+### Pendiente
+Notificaciones push, widget de pantalla de inicio y sincronización en la nube.

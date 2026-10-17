@@ -7,6 +7,7 @@ import '../providers/locale_provider.dart';
 import '../utils/formatters.dart';
 import 'category_selector_row.dart';
 import 'currency_dropdown.dart';
+import 'receipt_flow.dart';
 
 /// Diálogo para editar un gasto ya registrado (nombre, monto, divisa,
 /// categoría y fecha).
@@ -107,6 +108,7 @@ class _EditExpenseDialogState extends State<_EditExpenseDialog> {
       note: _noteController.text,
       localAmount: localAmount,
       localCurrencyAtCreation: localCurrencyAtCreation,
+      receiptPath: widget.expense.receiptPath,
     );
     Navigator.of(context).pop();
   }
@@ -158,6 +160,14 @@ class _EditExpenseDialogState extends State<_EditExpenseDialog> {
               decoration: InputDecoration(labelText: locale.t('nota_opcional')),
             ),
             const SizedBox(height: 12),
+            if (widget.expense.receiptPath != null) ...[
+              TextButton.icon(
+                onPressed: () => showReceiptViewer(context, widget.expense.receiptPath!),
+                icon: const Icon(Icons.receipt_long_outlined, size: 18),
+                label: Text(locale.t('ver_recibo')),
+              ),
+              const SizedBox(height: 4),
+            ],
             OutlinedButton.icon(
               onPressed: _pickDate,
               icon: const Icon(Icons.calendar_today_rounded, size: 18),

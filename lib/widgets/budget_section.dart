@@ -35,7 +35,9 @@ class BudgetSection extends StatelessWidget {
             children: [
               Expanded(
                 child: SectionLabel(
-                  locale.t('presupuesto_mensual'),
+                  finance.isPayPeriodBudget
+                      ? locale.t('presupuesto_periodo')
+                      : locale.t('presupuesto_mensual'),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
@@ -47,6 +49,11 @@ class BudgetSection extends StatelessWidget {
               ),
             ],
           ),
+          if (finance.isPayPeriodBudget)
+            Text(
+              '${locale.t('desde')} ${formatDateShort(finance.budgetPeriod().start)}',
+              style: theme.textTheme.bodySmall,
+            ),
           const SizedBox(height: 6),
           if (budgetedCategories.isEmpty)
             Text(locale.t('sin_presupuestos'), style: TextStyle(color: theme.hintColor))
@@ -54,8 +61,9 @@ class BudgetSection extends StatelessWidget {
             for (final cat in budgetedCategories)
               _BudgetRow(
                 category: cat,
-                limit: budgets[cat]!,
-                spent: monthSpentLocal(finance, currency, cat),
+                limit: budgets[cat]! + budgetCarryOver(finance, currency, cat, budgets[cat]!),
+                carry: budgetCarryOver(finance, currency, cat, budgets[cat]!),
+                spent: periodSpentLocal(finance, currency, cat),
                 currencyCode: finance.localCurrency,
                 locale: locale,
               ),
@@ -65,8 +73,8 @@ class BudgetSection extends StatelessWidget {
               double totalLimit = 0;
               double totalSpent = 0;
               for (final cat in budgetedCategories) {
-                totalLimit += budgets[cat]!;
-                totalSpent += monthSpentLocal(finance, currency, cat);
+                totalLimit += budgets[cat]! + budgetCarryOver(finance, currency, cat, budgets[cat]!);
+                totalSpent += periodSpentLocal(finance, currency, cat);
               }
               return Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -90,6 +98,7 @@ class BudgetSection extends StatelessWidget {
 class _BudgetRow extends StatelessWidget {
   final String category;
   final double limit;
+  final double carry;
   final double spent;
   final String currencyCode;
   final LocaleProvider locale;
@@ -97,6 +106,7 @@ class _BudgetRow extends StatelessWidget {
   const _BudgetRow({
     required this.category,
     required this.limit,
+    required this.carry,
     required this.spent,
     required this.currencyCode,
     required this.locale,
@@ -152,6 +162,11 @@ class _BudgetRow extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 4),
+          if (carry > 0)
+            Text(
+              '+ ${formatCurrency(carry, currencyCode)} ${locale.t('del_mes_anterior')}',
+              style: theme.textTheme.bodySmall,
+            ),
           Text(
             status,
             style: theme.textTheme.bodySmall?.copyWith(

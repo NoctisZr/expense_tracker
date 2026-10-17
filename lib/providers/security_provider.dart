@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:hive/hive.dart';
+import '../services/biometric_service.dart';
 
 /// Bloqueo opcional de la app con un PIN de 4 dígitos. El PIN nunca se
 /// guarda: solo un hash SHA-256 con sal aleatoria. Si hay PIN, la app se
@@ -10,6 +11,7 @@ import 'package:hive/hive.dart';
 class SecurityProvider extends ChangeNotifier with WidgetsBindingObserver {
   static const String _hashKey = 'pinHash';
   static const String _saltKey = 'pinSalt';
+  static const String _biometricKey = 'biometricEnabled';
   static const int pinLength = 4;
   static const Duration lockAfter = Duration(seconds: 30);
   static const int _maxAttempts = 5;
@@ -29,6 +31,28 @@ class SecurityProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   bool get hasPin => settingsBox.get(_hashKey) is String;
   bool get isLocked => _locked && hasPin;
+
+  /// `true` si el usuario activó el desbloqueo con huella (requiere PIN).
+  bool get biometricEnabled =>
+      hasPin && BiometricService.isAvailable && settingsBox.get(_biometricKey, defaultValue: false) == true;
+
+  Future<void> setBiometricEnabled(bool value) async {
+    await settingsBox.put(_biometricKey, value);
+    notifyListeners();
+  }
+
+  /// Pide la huella y, si es correcta, desbloquea la app.
+  Future<bool> unlockWithBiometrics(String reason) async {
+    if (!biometricEnabled) return false;
+    final bool ok = await BiometricService().authenticate(reason);
+    if (ok) {
+      _failedAttempts = 0;
+      _blockedUntil = null;
+      _locked = false;
+      notifyListeners();
+    }
+    return ok;
+  }
 
   /// Segundos que faltan para poder reintentar tras demasiados errores.
   int get blockedSeconds {
@@ -87,6 +111,7 @@ class SecurityProvider extends ChangeNotifier with WidgetsBindingObserver {
   Future<void> removePin() async {
     await settingsBox.delete(_hashKey);
     await settingsBox.delete(_saltKey);
+    await settingsBox.delete(_biometricKey);
     _locked = false;
     notifyListeners();
   }

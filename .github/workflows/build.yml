@@ -40,8 +40,40 @@ jobs:
           fi
           cat "$MANIFEST"
 
-      - name: Instalar dependencias (hive_flutter, provider, fl_chart, http...)
-        run: flutter pub get
+      - name: Preparar la huella dactilar (MainActivity y permiso)
+        run: |
+          MANIFEST="android/app/src/main/AndroidManifest.xml"
+          if ! grep -q "android.permission.USE_BIOMETRIC" "$MANIFEST"; then
+            sed -i '/<manifest /a\    <uses-permission android:name="android.permission.USE_BIOMETRIC"/>' "$MANIFEST"
+          fi
+          MAIN=$(find android/app/src/main -name 'MainActivity.kt' | head -n 1)
+          if [ -n "$MAIN" ]; then
+            sed -i 's/import io.flutter.embedding.android.FlutterActivity/import io.flutter.embedding.android.FlutterFragmentActivity/; s/FlutterActivity()/FlutterFragmentActivity()/' "$MAIN"
+            cat "$MAIN"
+          else
+            echo "::warning::No se encontró MainActivity.kt; la huella podría no funcionar (el PIN sí)."
+          fi
+
+      - name: Configurar la firma estable del APK (si hay secretos)
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ]; then
+            echo "::warning::No hay secretos de firma. El APK se firmará con la clave de depuración y cada build tendrá una firma distinta (no se podrá instalar encima del anterior)."
+            exit 0
+          fi
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/upload-keystore.jks"
+          {
+            echo "android.injected.signing.store.file=$RUNNER_TEMP/upload-keystore.jks"
+            echo "android.injected.signing.store.password=$KEYSTORE_PASSWORD"
+            echo "android.injected.signing.key.alias=$KEY_ALIAS"
+            echo "android.injected.signing.key.password=$KEY_PASSWORD"
+          } >> android/gradle.properties
+          echo "SIGNED=true" >> "$GITHUB_ENV"
+          echo "Firma estable configurada."
 
       - name: Analizar el código (informativo, no bloquea el build)
         run: flutter analyze || true
@@ -49,8 +81,45 @@ jobs:
       - name: Pruebas unitarias (informativo, no bloquea el build)
         run: flutter test || true
 
-      - name: Compilar el APK en modo release
-        run: flutter build apk --release
+      - name: Compilar el APK en modo release (con plan B "lite" si falla)
+        run: |
+          make_lite() {
+            sed -i '/google_mlkit_text_recognition/d;/local_auth:/d' pubspec.yaml
+            cp tool/lite/receipt_ocr_service.dart lib/services/receipt_ocr_service.dart
+            cp tool/lite/biometric_service.dart lib/services/biometric_service.dart
+          }
+          if flutter pub get && flutter build apk --release; then
+            echo "BUILD_MODE=completa" >> "$GITHUB_ENV"
+          else
+            echo "::warning::El build completo falló. Reintentando en modo lite (sin escaneo de facturas ni huella)."
+            make_lite
+            flutter pub get
+            flutter build apk --release
+            echo "BUILD_MODE=lite" >> "$GITHUB_ENV"
+          fi
+
+      - name: Mostrar con qué certificado quedó firmado el APK
+        run: |
+          APKSIGNER=$(ls -d "$ANDROID_HOME"/build-tools/*/apksigner 2>/dev/null | sort -V | tail -n 1)
+          if [ -z "$APKSIGNER" ]; then
+            echo "apksigner no encontrado; se omite la verificación."
+            exit 0
+          fi
+          OUT=$("$APKSIGNER" verify --print-certs build/app/outputs/flutter-apk/app-release.apk 2>&1 || true)
+          echo "$OUT"
+          {
+            echo "### Certificado del APK (modo: ${BUILD_MODE:-?})"
+            echo '```'
+            echo "$OUT" | grep -i "certificate" || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          if echo "$OUT" | grep -qi "Android Debug"; then
+            if [ "$SIGNED" = "true" ]; then
+              echo "::warning::Hay secretos de firma pero el APK sigue firmado con la clave de depuración. Revisa SIGNING.md."
+            else
+              echo "::warning::APK firmado con la clave de depuración (sin firma estable)."
+            fi
+          fi
 
       - name: Subir el APK como artifact de esta ejecución
         uses: actions/upload-artifact@v4
@@ -63,5 +132,5 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
-          name: "Expense Tracker — build #${{ github.run_number }}"
+          name: "Expense Tracker — build #${{ github.run_number }} (${{ env.BUILD_MODE }})"
           files: build/app/outputs/flutter-apk/app-release.apk

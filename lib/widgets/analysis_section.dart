@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/expense.dart';
+import '../models/income.dart';
 import '../providers/currency_provider.dart';
 import '../providers/finance_provider.dart';
 import '../providers/locale_provider.dart';
@@ -56,6 +57,30 @@ class AnalysisSection extends StatelessWidget {
           .expenseLocalValue(b, currency)
           .compareTo(finance.expenseLocalValue(a, currency)));
     final List<Expense> top = monthExpenses.take(5).toList();
+
+    // --- Periodo de pago actual vs anterior (desde el último ingreso) ---
+    final Income? payIncome = finance.currentPayIncome;
+    double periodSpent = 0;
+    int periodDays = 1;
+    double? previousTotal;
+    int previousDays = 1;
+    if (payIncome != null) {
+      final int rawDays = now.difference(payIncome.date).inDays + 1;
+      periodDays = rawDays < 1 ? 1 : rawDays;
+      for (final e in finance.expensesInPeriod(payIncome.date, null)) {
+        periodSpent += finance.expenseLocalValue(e, currency);
+      }
+      final Income? previousIncome = finance.previousPayIncome(payIncome);
+      if (previousIncome != null) {
+        final int rawPrev = payIncome.date.difference(previousIncome.date).inDays;
+        previousDays = rawPrev < 1 ? 1 : rawPrev;
+        double sum = 0;
+        for (final e in finance.expensesInPeriod(previousIncome.date, payIncome.date)) {
+          sum += finance.expenseLocalValue(e, currency);
+        }
+        previousTotal = sum;
+      }
+    }
 
     return SectionCard(
       child: Column(
@@ -156,6 +181,45 @@ class AnalysisSection extends StatelessWidget {
                   ),
                 ),
             ],
+          ],
+          if (payIncome != null) ...[
+            const Divider(height: 28),
+            Text(
+              locale.t('periodo_de_pago'),
+              style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            Text(
+              '${locale.t('desde')} ${formatDateShort(payIncome.date)} · $periodDays ${locale.t('dias')}',
+              style: theme.textTheme.bodySmall,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              formatCurrency(periodSpent, finance.localCurrency),
+              style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            Text(
+              '${locale.t('promedio_diario')}: ${formatCurrency(periodSpent / periodDays, finance.localCurrency)}',
+              style: theme.textTheme.bodySmall,
+            ),
+            if (previousTotal != null && previousTotal > 0)
+              Builder(builder: (context) {
+                final double prevTotal = previousTotal!;
+                final double currentAvg = periodSpent / periodDays;
+                final double previousAvg = prevTotal / previousDays;
+                final double change = (currentAvg - previousAvg) / previousAvg * 100;
+                final bool up = change > 0;
+                return Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    '${up ? '▲' : '▼'} ${change.abs().toStringAsFixed(0)}% ${locale.t('vs_periodo_anterior')} '
+                    '(${formatCurrency(prevTotal, finance.localCurrency)})',
+                    style: TextStyle(
+                      color: up ? extras.danger : extras.success,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                );
+              }),
           ],
         ],
       ),

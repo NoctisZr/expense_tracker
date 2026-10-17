@@ -9,6 +9,10 @@ import '../utils/category_style.dart';
 import '../utils/formatters.dart';
 import '../widgets/add_expense_section.dart';
 import '../widgets/analysis_section.dart';
+import '../widgets/backup_nudge_card.dart';
+import '../widgets/debts_section.dart';
+import '../widgets/next_payment_card.dart';
+import '../widgets/recurring_income_section.dart';
 import '../widgets/balance_donut_chart.dart';
 import '../widgets/budget_section.dart';
 import '../widgets/category_selector_row.dart';
@@ -170,6 +174,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
             const SizedBox(height: 14),
             if (_view == 0) ...[
+            const BackupNudgeCard(),
+            const NextPaymentCard(),
             SectionCard(
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -415,7 +421,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
               const UpcomingCharges(),
               const BudgetSection(),
               const SizedBox(height: 18),
+              const RecurringIncomeSection(),
+              const SizedBox(height: 18),
               const RecurringSection(),
+              const SizedBox(height: 18),
+              const DebtsSection(),
             ],
           ],
         ),

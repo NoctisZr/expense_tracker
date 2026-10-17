@@ -10,10 +10,17 @@ import 'category_selector_row.dart';
 import 'currency_dropdown.dart';
 import 'section_card.dart';
 
+/// Texto de una frecuencia (compartido con la sección de ingresos recurrentes).
+String frequencyLabel(LocaleProvider locale, String frequency) => _frequencyLabel(locale, frequency);
+
 String _frequencyLabel(LocaleProvider locale, String frequency) {
   switch (frequency) {
     case RecurringExpense.weekly:
       return locale.t('frecuencia_semanal');
+    case RecurringExpense.biweekly:
+      return locale.t('frecuencia_catorcenal');
+    case RecurringExpense.semimonthly:
+      return locale.t('frecuencia_quincenal');
     case RecurringExpense.yearly:
       return locale.t('frecuencia_anual');
     case RecurringExpense.monthly:
@@ -304,20 +311,17 @@ class _RecurringDialogState extends State<_RecurringDialog> {
               ],
             ),
             const SizedBox(height: 14),
-            SizedBox(
-              width: double.infinity,
-              child: SegmentedButton<String>(
-                showSelectedIcon: false,
-                segments: [
-                  for (final f in RecurringExpense.frequencies)
-                    ButtonSegment<String>(
-                      value: f,
-                      label: Text(_frequencyLabel(locale, f), style: const TextStyle(fontSize: 12)),
-                    ),
-                ],
-                selected: {_frequency},
-                onSelectionChanged: (selection) => setState(() => _frequency = selection.first),
-              ),
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              children: [
+                for (final f in RecurringExpense.frequencies)
+                  ChoiceChip(
+                    label: Text(_frequencyLabel(locale, f), style: const TextStyle(fontSize: 12)),
+                    selected: _frequency == f,
+                    onSelected: (_) => setState(() => _frequency = f),
+                  ),
+              ],
             ),
             const SizedBox(height: 12),
             OutlinedButton.icon(
