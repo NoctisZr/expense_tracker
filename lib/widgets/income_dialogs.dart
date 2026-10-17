@@ -1,32 +1,40 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../models/income.dart';
 import '../providers/finance_provider.dart';
 import '../providers/locale_provider.dart';
 import '../utils/formatters.dart';
 import 'currency_dropdown.dart';
 
-Future<void> showAddIncomeDialog(BuildContext context) {
-  return showDialog(context: context, builder: (_) => const _AddIncomeDialog());
+/// Registra un ingreso o, si se pasa [existing], lo edita.
+Future<void> showAddIncomeDialog(BuildContext context, {Income? existing}) {
+  return showDialog(context: context, builder: (_) => _AddIncomeDialog(existing: existing));
 }
 
 class _AddIncomeDialog extends StatefulWidget {
-  const _AddIncomeDialog();
+  final Income? existing;
+  const _AddIncomeDialog({this.existing});
 
   @override
   State<_AddIncomeDialog> createState() => _AddIncomeDialogState();
 }
 
 class _AddIncomeDialogState extends State<_AddIncomeDialog> {
-  final TextEditingController _labelController = TextEditingController();
-  final TextEditingController _amountController = TextEditingController();
+  late final TextEditingController _labelController;
+  late final TextEditingController _amountController;
   late String _currency;
-  DateTime _date = DateTime.now();
+  late DateTime _date;
   String? _error;
 
   @override
   void initState() {
     super.initState();
-    _currency = context.read<FinanceProvider>().localCurrency;
+    final Income? i = widget.existing;
+    _labelController = TextEditingController(text: i?.label ?? '');
+    _amountController =
+        TextEditingController(text: i == null ? '' : i.amount.toStringAsFixed(2));
+    _currency = i?.currency ?? context.read<FinanceProvider>().localCurrency;
+    _date = i?.date ?? DateTime.now();
   }
 
   @override
@@ -57,12 +65,24 @@ class _AddIncomeDialogState extends State<_AddIncomeDialog> {
       return;
     }
 
-    context.read<FinanceProvider>().addIncome(
-          label: label.isEmpty ? locale.t('sueldo_label_defecto') : label,
-          amount: amount,
-          currency: _currency,
-          date: _date,
-        );
+    final finance = context.read<FinanceProvider>();
+    final String finalLabel = label.isEmpty ? locale.t('sueldo_label_defecto') : label;
+    if (widget.existing == null) {
+      finance.addIncome(
+        label: finalLabel,
+        amount: amount,
+        currency: _currency,
+        date: _date,
+      );
+    } else {
+      finance.updateIncome(
+        id: widget.existing!.id,
+        label: finalLabel,
+        amount: amount,
+        currency: _currency,
+        date: _date,
+      );
+    }
     Navigator.of(context).pop();
   }
 
@@ -71,7 +91,7 @@ class _AddIncomeDialogState extends State<_AddIncomeDialog> {
     final locale = context.watch<LocaleProvider>();
 
     return AlertDialog(
-      title: Text(locale.t('registrar_ingreso')),
+      title: Text(widget.existing == null ? locale.t('registrar_ingreso') : locale.t('editar_ingreso')),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
