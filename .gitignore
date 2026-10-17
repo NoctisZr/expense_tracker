@@ -1,0 +1,5 @@
+
+*.jks
+*.keystore
+*.b64
+key.properties
