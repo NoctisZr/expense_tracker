@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.3.1
+- Tasas de cambio transparentes: se muestran por separado la fecha de los datos del
+  proveedor y la de la última descarga, con la fuente; el botón de actualizar avisa si
+  hubo datos nuevos, si el proveedor aún no publicó o si falló.
+- Varias fuentes gratuitas consultadas a la vez (gana la más reciente, completa las
+  divisas que falten) y nunca se reemplazan datos nuevos por otros más viejos.
+- Tasas cada hora (opcional) con una clave gratuita de Open Exchange Rates.
+- Editor visual de mods: un color genera toda la paleta; vista previa, aviso de
+  contraste, "Mis mods" guardados, pegar un mod como texto y compartirlo como archivo.
+
 ## 1.3.0
 - Ingresos recurrentes (semanal, cada 2 semanas, quincenal 15 y fin de mes, mensual, anual).
 - Presupuesto por periodo de pago, sobrante mensual, próximo pago y análisis por periodo.

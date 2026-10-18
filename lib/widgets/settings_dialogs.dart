@@ -299,3 +299,103 @@ Future<DateTime?> pickReportMonth(BuildContext context) {
     ),
   );
 }
+
+
+/// Activar tasas actualizadas cada hora con una clave GRATIS de Open Exchange
+/// Rates (el plan gratuito permite 1 000 consultas al mes).
+Future<void> showHourlyRatesDialog(BuildContext context) {
+  return showDialog(context: context, builder: (_) => const _HourlyRatesDialog());
+}
+
+class _HourlyRatesDialog extends StatefulWidget {
+  const _HourlyRatesDialog();
+
+  @override
+  State<_HourlyRatesDialog> createState() => _HourlyRatesDialogState();
+}
+
+class _HourlyRatesDialogState extends State<_HourlyRatesDialog> {
+  late final TextEditingController _controller;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: context.read<CurrencyProvider>().openExchangeAppId ?? '');
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final currency = context.read<CurrencyProvider>();
+    final locale = context.read<LocaleProvider>();
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+    setState(() => _busy = true);
+    await currency.setOpenExchangeAppId(_controller.text);
+    if (!currency.hasHourlyKey) {
+      navigator.pop();
+      return;
+    }
+    final RatesRefreshOutcome outcome = await currency.fetchRates(manual: true, force: true);
+    navigator.pop();
+    messenger.showSnackBar(SnackBar(
+      content: Text(outcome == RatesRefreshOutcome.failed
+          ? '${locale.t('tasas_clave_error')}: ${currency.errorMessage ?? ''}'
+          : locale.t('tasas_clave_guardada')),
+    ));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final locale = context.watch<LocaleProvider>();
+    final theme = Theme.of(context);
+
+    return AlertDialog(
+      title: Text(locale.t('tasas_cada_hora')),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(locale.t('tasas_cada_hora_ayuda'), style: theme.textTheme.bodySmall),
+            const SizedBox(height: 12),
+            const SelectableText('openexchangerates.org', style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _controller,
+              autocorrect: false,
+              enableSuggestions: false,
+              decoration: InputDecoration(labelText: locale.t('tasas_clave_label')),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _busy ? null : () => Navigator.of(context).pop(),
+          child: Text(locale.t('cancelar')),
+        ),
+        if (context.read<CurrencyProvider>().hasHourlyKey)
+          TextButton(
+            onPressed: _busy
+                ? null
+                : () async {
+                    final navigator = Navigator.of(context);
+                    await context.read<CurrencyProvider>().setOpenExchangeAppId(null);
+                    navigator.pop();
+                  },
+            child: Text(locale.t('tasas_clave_quitar')),
+          ),
+        ElevatedButton(
+          onPressed: _busy ? null : _save,
+          child: Text(locale.t('guardar')),
+        ),
+      ],
+    );
+  }
+}

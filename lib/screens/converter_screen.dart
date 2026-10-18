@@ -7,6 +7,7 @@ import '../utils/app_theme_extension.dart';
 import '../utils/formatters.dart';
 import '../widgets/currency_dropdown.dart';
 import '../widgets/section_card.dart';
+import '../widgets/settings_dialogs.dart';
 
 class ConverterScreen extends StatefulWidget {
   const ConverterScreen({super.key});
@@ -183,53 +184,96 @@ class _RatesStatusBanner extends StatelessWidget {
 
   const _RatesStatusBanner({required this.currencyProvider, required this.locale});
 
+  Future<void> _refresh(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final RatesRefreshOutcome outcome = await currencyProvider.fetchRates(manual: true);
+    final String key = switch (outcome) {
+      RatesRefreshOutcome.updated => 'tasas_actualizadas_ok',
+      RatesRefreshOutcome.unchanged => currencyProvider.hasHourlyKey
+          ? 'tasas_sin_cambios_hora'
+          : 'tasas_sin_cambios',
+      RatesRefreshOutcome.skipped => 'tasas_espera',
+      RatesRefreshOutcome.failed => 'tasas_fallo',
+    };
+    messenger.showSnackBar(SnackBar(content: Text(locale.t(key))));
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    String message;
+    final CurrencyProvider rates = currencyProvider;
+    final List<String> lines = [];
     IconData icon = Icons.history;
     Color? iconColor;
 
-    if (currencyProvider.isLoading && !currencyProvider.hasRates) {
-      message = locale.t('cargando_tasas');
-    } else if (currencyProvider.errorMessage != null) {
-      message = currencyProvider.hasRates
-          ? locale.t('sin_conexion_tasas')
-          : locale.t('sin_tasas_disponibles');
+    if (rates.isLoading && !rates.hasRates) {
+      lines.add(locale.t('cargando_tasas'));
+    } else if (rates.hasRates) {
+      // Siempre se muestran las dos fechas: la del proveedor y la de la
+      // última descarga en este teléfono (son cosas distintas).
+      if (rates.lastUpdated != null) {
+        lines.add('${locale.t('tasas_datos_proveedor')}: ${formatDateTime(rates.lastUpdated!)}');
+      }
+      if (rates.lastFetchedAt != null) {
+        final String source = rates.source == null ? '' : ' · ${locale.t('tasas_fuente')}: ${rates.source}';
+        lines.add('${locale.t('tasas_descargadas')}: ${formatDateTime(rates.lastFetchedAt!)}$source');
+      }
+      if (rates.errorMessage != null) {
+        lines.add('${locale.t('tasas_usando_guardadas')} (${rates.errorMessage})');
+        icon = Icons.cloud_off_rounded;
+        iconColor = theme.colorScheme.error;
+      } else if (rates.hasHourlyKey) {
+        lines.add(locale.t('tasas_cada_hora_activa'));
+      } else {
+        lines.add(locale.t('tasas_una_vez_al_dia'));
+      }
+    } else if (rates.errorMessage != null) {
+      lines.add('${locale.t('sin_tasas_disponibles')} (${rates.errorMessage})');
       icon = Icons.cloud_off_rounded;
       iconColor = theme.colorScheme.error;
-    } else if (currencyProvider.lastUpdated != null) {
-      message =
-          '${locale.t('ultima_actualizacion_tasas')}: ${formatDateTime(currencyProvider.lastUpdated!)}';
     } else {
-      message = locale.t('sin_tasas_disponibles');
+      lines.add(locale.t('sin_tasas_disponibles'));
     }
 
     return SectionCard(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (currencyProvider.isLoading)
-            SizedBox(
-              width: 18,
-              height: 18,
-              child: CircularProgressIndicator(strokeWidth: 2, color: theme.colorScheme.primary),
-            )
-          else
-            Icon(icon, size: 20, color: iconColor ?? theme.hintColor),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              message,
-              style: TextStyle(color: theme.hintColor, fontSize: 12.5),
+          Row(
+            children: [
+              if (rates.isLoading)
+                SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: theme.colorScheme.primary),
+                )
+              else
+                Icon(icon, size: 20, color: iconColor ?? theme.hintColor),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  lines.join('\n'),
+                  style: TextStyle(color: theme.hintColor, fontSize: 12.5),
+                ),
+              ),
+              IconButton(
+                onPressed: rates.isLoading ? null : () => _refresh(context),
+                icon: Icon(Icons.refresh, color: theme.colorScheme.primary),
+                tooltip: locale.t('actualizar_tasas'),
+                visualDensity: VisualDensity.compact,
+              ),
+            ],
+          ),
+          if (!rates.hasHourlyKey)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: () => showHourlyRatesDialog(context),
+                icon: const Icon(Icons.bolt_rounded, size: 18),
+                label: Text(locale.t('tasas_cada_hora')),
+              ),
             ),
-          ),
-          IconButton(
-            onPressed: currencyProvider.isLoading ? null : () => currencyProvider.fetchRates(),
-            icon: Icon(Icons.refresh, color: theme.colorScheme.primary),
-            tooltip: locale.t('actualizar_tasas'),
-            visualDensity: VisualDensity.compact,
-          ),
         ],
       ),
     );

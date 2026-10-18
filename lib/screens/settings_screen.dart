@@ -25,6 +25,7 @@ import '../widgets/mod_gallery.dart';
 import '../widgets/pin_widgets.dart';
 import '../widgets/section_card.dart';
 import '../widgets/settings_dialogs.dart';
+import 'mod_editor_screen.dart';
 import 'trash_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -199,7 +200,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         throw const FormatException('formato inválido');
       }
       if (!mounted) return;
-      final bool applied = await applyModWithChecks(context, decoded);
+      final bool applied = await applyModWithChecks(context, decoded, saveToMyMods: true);
       if (applied) _showSnack(locale.t('mod_aplicado_exitosamente'));
     } catch (_) {
       _showSnack(locale.t('mod_invalido'));
@@ -506,6 +507,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     icon: const Icon(Icons.edit_note_rounded),
                     label: Text(locale.t('tasas_manuales')),
                   ),
+                  const SizedBox(height: 10),
+                  OutlinedButton.icon(
+                    onPressed: () => showHourlyRatesDialog(context),
+                    icon: const Icon(Icons.bolt_rounded),
+                    label: Text(locale.t('tasas_cada_hora')),
+                  ),
                 ],
               ),
             ),
@@ -655,6 +662,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     spacing: 10,
                     runSpacing: 10,
                     children: [
+                      ElevatedButton.icon(
+                        onPressed: () => Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => const ModEditorScreen()),
+                        ),
+                        icon: const Icon(Icons.brush_rounded),
+                        label: Text(locale.t('crear_mod')),
+                      ),
                       OutlinedButton.icon(
                         onPressed: () => showModGallery(context),
                         icon: const Icon(Icons.palette_outlined),

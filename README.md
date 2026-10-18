@@ -245,3 +245,14 @@ nombre del release.
 
 ### Pendiente
 Notificaciones push, widget de pantalla de inicio y sincronización en la nube.
+
+
+## Novedades de la v1.3.1
+
+- **Tasas de cambio**: ahora se ven dos fechas (datos del proveedor y última descarga),
+  fuente usada y un aviso al pulsar actualizar. Las fuentes gratuitas publican nuevas
+  tasas solo **una vez al día**; para tasas de la última hora, Ajustes → Monedas y tasas →
+  "Tasas cada hora" (clave gratuita de openexchangerates.org).
+- **Editor de mods**: Ajustes → Personalización → Crear mod. Eliges un color de acento
+  y "oscuro/claro", se genera la paleta, ves la vista previa y guardas en "Mis mods".
+  También puedes pegar el texto (JSON) de un mod, editarlo, duplicarlo y compartirlo.

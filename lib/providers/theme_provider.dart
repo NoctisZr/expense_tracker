@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:hive/hive.dart';
 import '../models/mod_theme.dart';
@@ -12,6 +13,7 @@ class ThemeProvider extends ChangeNotifier {
   static const String _modJsonKey = 'activeModJson';
   static const String _backgroundImagePathKey = 'backgroundImagePath';
   static const String _textScaleKey = 'textScale';
+  static const String _userModsKey = 'userMods';
 
   final Box settingsBox;
 
@@ -46,6 +48,40 @@ class ThemeProvider extends ChangeNotifier {
   Color get accentColor => _accentColor;
   ModTheme? get activeMod => _activeMod;
   String? get backgroundImagePath => _backgroundImagePath;
+
+  /// Mods guardados por el usuario (creados con el editor, pegados o
+  /// cargados desde un archivo). Cada uno es el JSON del mod.
+  List<Map<String, dynamic>> get userMods {
+    final dynamic raw = settingsBox.get(_userModsKey);
+    final List<Map<String, dynamic>> result = [];
+    if (raw is List) {
+      for (final item in raw) {
+        try {
+          final dynamic decoded = json.decode(json.encode(item));
+          if (decoded is Map && decoded['name'] is String) {
+            result.add(Map<String, dynamic>.from(decoded));
+          }
+        } catch (_) {}
+      }
+    }
+    return result;
+  }
+
+  /// Guarda (o reemplaza, si ya existe uno con ese nombre) un mod propio.
+  Future<void> saveUserMod(Map<String, dynamic> modJson) async {
+    final String name = (modJson['name'] as String).trim();
+    final List<Map<String, dynamic>> list =
+        userMods.where((m) => (m['name'] as String).trim() != name).toList()..add(modJson);
+    await settingsBox.put(_userModsKey, list);
+    notifyListeners();
+  }
+
+  Future<void> deleteUserMod(String name) async {
+    final List<Map<String, dynamic>> list =
+        userMods.where((m) => (m['name'] as String).trim() != name.trim()).toList();
+    await settingsBox.put(_userModsKey, list);
+    notifyListeners();
+  }
 
   /// Multiplicador del tamaño de texto (0.85 – 1.4), sumado al del sistema.
   double get textScale => _textScale;
