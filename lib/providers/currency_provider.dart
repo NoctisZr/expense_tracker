@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:hive/hive.dart';
+import '../models/rate_alert.dart';
 import '../services/currency_api_service.dart';
+import '../utils/currency_list.dart';
+import '../utils/id_generator.dart';
 
 /// Resultado de pedir las tasas.
 enum RatesRefreshOutcome {
@@ -24,6 +27,9 @@ class CurrencyProvider extends ChangeNotifier {
   static const String _fetchedAtKey = 'cachedRatesFetchedAt';
   static const String _sourceKey = 'cachedRatesSource';
   static const String _appIdKey = 'openExchangeAppId';
+  static const String _historyKey = 'rateHistory';
+  static const String _alertsKey = 'rateAlerts';
+  static const int _historyDays = 180;
 
   final Box settingsBox;
   final CurrencyApiService _apiService;
@@ -50,13 +56,22 @@ class CurrencyProvider extends ChangeNotifier {
   String? _openExchangeAppId;
   DateTime? _lastAttempt;
 
+  /// Historial local: día (aaaa-mm-dd, UTC) -> tasas de las divisas
+  /// soportadas. Se va llenando con cada actualización con datos nuevos.
+  Map<String, Map<String, double>> _history = {};
+
+  /// Se llama cuando, tras actualizar las tasas, se cumplen alertas.
+  void Function(List<RateAlert> alerts)? onAlertsFired;
+
   CurrencyProvider(this.settingsBox, {CurrencyApiService? apiService})
       : _apiService = apiService ?? CurrencyApiService() {
     _openExchangeAppId = settingsBox.get(_appIdKey) as String?;
     _loadCachedRates();
+    _loadHistory();
     _loadManualRates();
     _rebuildRates();
-    fetchRates();
+    // La primera descarga ya no se lanza aquí: HomeScreen llama a
+    // refreshIfStale() un instante después de dibujar la pantalla.
   }
 
   Map<String, double> get rates => _rates;
@@ -213,9 +228,12 @@ class CurrencyProvider extends ChangeNotifier {
         _lastUpdated = result.updatedAt;
         _source = result.source.isEmpty ? _source : result.source;
         outcome = newer ? RatesRefreshOutcome.updated : RatesRefreshOutcome.unchanged;
+        _recordHistory(result);
       }
       _lastFetchedAt = DateTime.now();
       await _cacheRates();
+      final List<RateAlert> fired = evaluateAlerts();
+      if (fired.isNotEmpty) onAlertsFired?.call(fired);
     } on CurrencyApiException catch (e) {
       _errorMessage = e.message;
     } catch (_) {
@@ -225,6 +243,133 @@ class CurrencyProvider extends ChangeNotifier {
     _isLoading = false;
     notifyListeners();
     return outcome;
+  }
+
+  // ---------------------------------------------------------------------
+  // Historial de tasas (para el gráfico de evolución)
+  // ---------------------------------------------------------------------
+
+  static String _dayKey(DateTime d) {
+    final DateTime u = d.toUtc();
+    return '${u.year}-${u.month.toString().padLeft(2, '0')}-${u.day.toString().padLeft(2, '0')}';
+  }
+
+  void _loadHistory() {
+    final dynamic raw = settingsBox.get(_historyKey);
+    final Map<String, Map<String, double>> loaded = {};
+    if (raw is Map) {
+      raw.forEach((day, rates) {
+        if (rates is Map) {
+          final Map<String, double> byCode = {};
+          rates.forEach((code, value) {
+            if (value is num && value > 0) byCode[code.toString()] = value.toDouble();
+          });
+          if (byCode.isNotEmpty) loaded[day.toString()] = byCode;
+        }
+      });
+    }
+    _history = loaded;
+  }
+
+  void _recordHistory(CurrencyRatesResult result) {
+    final Map<String, double> snapshot = {
+      for (final code in kSupportedCurrencies)
+        if (result.rates.containsKey(code)) code: result.rates[code]!,
+    };
+    if (snapshot.length < 2) return;
+    _history[_dayKey(result.updatedAt)] = snapshot;
+    if (_history.length > _historyDays) {
+      final List<String> keys = _history.keys.toList()..sort();
+      for (final k in keys.take(_history.length - _historyDays)) {
+        _history.remove(k);
+      }
+    }
+    settingsBox.put(_historyKey, _history);
+  }
+
+  /// Serie (fecha, valor de 1 [from] en [to]) de los últimos [days] días, de
+  /// la más antigua a la más reciente. Solo incluye los días guardados.
+  List<MapEntry<DateTime, double>> historyFor(String from, String to, int days) {
+    final DateTime limit = DateTime.now().toUtc().subtract(Duration(days: days));
+    final List<MapEntry<DateTime, double>> result = [];
+    final List<String> keys = _history.keys.toList()..sort();
+    for (final key in keys) {
+      final DateTime? day = DateTime.tryParse(key);
+      if (day == null || day.isBefore(DateTime.utc(limit.year, limit.month, limit.day))) continue;
+      final Map<String, double> rates = _history[key]!;
+      final double? a = rates[from];
+      final double? b = rates[to];
+      if (a == null || b == null || a <= 0) continue;
+      result.add(MapEntry(day, b / a));
+    }
+    return result;
+  }
+
+  // ---------------------------------------------------------------------
+  // Alertas de tasa
+  // ---------------------------------------------------------------------
+
+  List<RateAlert> get rateAlerts {
+    final dynamic raw = settingsBox.get(_alertsKey);
+    final List<RateAlert> result = [];
+    if (raw is List) {
+      for (final item in raw) {
+        if (item is Map) {
+          try {
+            result.add(RateAlert.fromMap(item));
+          } catch (_) {}
+        }
+      }
+    }
+    return result;
+  }
+
+  Future<void> _saveAlerts(List<RateAlert> list) async {
+    await settingsBox.put(_alertsKey, list.map((a) => a.toMap()).toList());
+  }
+
+  Future<void> addRateAlert({
+    required String from,
+    required String to,
+    required bool above,
+    required double target,
+  }) async {
+    final List<RateAlert> list = rateAlerts
+      ..add(RateAlert(id: generateId(), from: from, to: to, above: above, target: target));
+    await _saveAlerts(list);
+    notifyListeners();
+  }
+
+  Future<void> deleteRateAlert(String id) async {
+    await _saveAlerts(rateAlerts.where((a) => a.id != id).toList());
+    notifyListeners();
+  }
+
+  /// Revisa las alertas con las tasas actuales. Devuelve las que se cumplen
+  /// ahora y no habían avisado en las últimas 12 horas (y las marca).
+  List<RateAlert> evaluateAlerts() {
+    final List<RateAlert> alerts = rateAlerts;
+    if (alerts.isEmpty || !hasRates) return const [];
+    final DateTime now = DateTime.now();
+    final List<RateAlert> fired = [];
+    final List<RateAlert> updated = [];
+    for (final alert in alerts) {
+      if (!canConvert(alert.from, alert.to)) {
+        updated.add(alert);
+        continue;
+      }
+      final double rate = convert(1, alert.from, alert.to);
+      final bool recently = alert.lastTriggered != null &&
+          now.difference(alert.lastTriggered!) < const Duration(hours: 12);
+      if (alert.isReachedBy(rate) && !recently) {
+        fired.add(alert);
+        updated.add(alert.copyWith(lastTriggered: now));
+      } else {
+        updated.add(alert);
+      }
+    }
+    if (fired.isNotEmpty) _saveAlerts(updated);
+    return fired;
   }
 
   double convert(double amount, String from, String to) {

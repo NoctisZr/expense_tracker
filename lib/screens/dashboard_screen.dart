@@ -5,10 +5,13 @@ import '../providers/currency_provider.dart';
 import '../providers/finance_provider.dart';
 import '../providers/locale_provider.dart';
 import '../utils/app_colors.dart';
+import '../utils/app_navigation.dart';
 import '../utils/category_style.dart';
 import '../utils/formatters.dart';
 import '../widgets/add_expense_section.dart';
+import '../widgets/account_widgets.dart';
 import '../widgets/analysis_section.dart';
+import '../widgets/annual_section.dart';
 import '../widgets/backup_nudge_card.dart';
 import '../widgets/debts_section.dart';
 import '../widgets/next_payment_card.dart';
@@ -27,6 +30,7 @@ import '../widgets/recurring_section.dart';
 import '../widgets/section_card.dart';
 import '../widgets/vault_card.dart';
 import '../widgets/vault_details_sheet.dart';
+import '../widgets/subscription_suggestions.dart';
 import '../widgets/upcoming_charges.dart';
 import '../widgets/vault_dialogs.dart';
 import '../widgets/workspace_selector.dart';
@@ -41,9 +45,34 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
+  @override
+  void initState() {
+    super.initState();
+    AppNavigation.dashboardView.addListener(_onViewRequest);
+  }
+
+  @override
+  void dispose() {
+    AppNavigation.dashboardView.removeListener(_onViewRequest);
+    super.dispose();
+  }
+
+  /// Un atajo de pantalla pidió abrir una vista concreta.
+  void _onViewRequest() {
+    final int? view = AppNavigation.dashboardView.value;
+    if (view == null) return;
+    AppNavigation.dashboardView.value = null;
+    if (mounted) setState(() => _view = view);
+  }
+
   int _view = 0; // 0 Resumen, 1 Movimientos, 2 Planificación
   bool _showCalendar = false;
   DateTimeRange? _range;
+  String? _filterTag;
+
+  /// Cuántos gastos se dibujan en la lista (se amplía con "Mostrar más"). Con
+  /// miles de gastos, dibujarlos todos a la vez hacía lenta la pantalla.
+  int _visibleCount = 40;
   String _query = '';
   String? _filterCategory;
 
@@ -108,12 +137,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final List<Expense> filtered = expenses
         .where((e) =>
             (_filterCategory == null || e.category == _filterCategory) &&
+            (_filterTag == null || (e.tags ?? const <String>[]).contains(_filterTag)) &&
             (query.isEmpty || e.name.toLowerCase().contains(query)) &&
             (_range == null ||
                 (!e.date.isBefore(_range!.start) &&
                     e.date.isBefore(_range!.end.add(const Duration(days: 1))))))
         .toList();
-    final bool filtersActive = query.isNotEmpty || _filterCategory != null || _range != null;
+    final int shownCount = filtered.length < _visibleCount ? filtered.length : _visibleCount;
+    final bool filtersActive =
+        query.isNotEmpty || _filterCategory != null || _filterTag != null || _range != null;
     double filteredTotal = 0;
     if (filtersActive) {
       for (final e in filtered) {
@@ -176,6 +208,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             if (_view == 0) ...[
             const BackupNudgeCard(),
             const NextPaymentCard(),
+            const AccountsSection(),
+            const SizedBox(height: 18),
             SectionCard(
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -288,6 +322,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             const SizedBox(height: 18),
             const AnalysisSection(),
             const SizedBox(height: 18),
+            const AnnualSection(),
+            const SizedBox(height: 18),
             const CategorySummary(),
             ],
             if (_view == 1) ...[
@@ -316,7 +352,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
             const SizedBox(height: 14),
             if (!_showCalendar && expenses.isNotEmpty) ...[
               TextField(
-                onChanged: (value) => setState(() => _query = value),
+                onChanged: (value) => setState(() {
+                  _query = value;
+                  _visibleCount = 40;
+                }),
                 decoration: InputDecoration(
                   hintText: locale.t('buscar_gastos'),
                   prefixIcon: const Icon(Icons.search_rounded),
@@ -335,7 +374,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           lastDate: now.add(const Duration(days: 366)),
                           initialDateRange: _range,
                         );
-                        if (picked != null) setState(() => _range = picked);
+                        if (picked != null) {
+                          setState(() {
+                            _range = picked;
+                            _visibleCount = 40;
+                          });
+                        }
                       },
                       icon: const Icon(Icons.date_range_rounded, size: 18),
                       label: Text(
@@ -348,7 +392,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                   if (_range != null)
                     IconButton(
-                      onPressed: () => setState(() => _range = null),
+                      onPressed: () => setState(() {
+                        _range = null;
+                        _visibleCount = 40;
+                      }),
                       icon: const Icon(Icons.close, size: 18),
                       visualDensity: VisualDensity.compact,
                     ),
@@ -364,7 +411,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     label: locale.t('todas'),
                     selected: _filterCategory == null,
                     color: theme.colorScheme.primary,
-                    onTap: () => setState(() => _filterCategory = null),
+                    onTap: () => setState(() {
+                      _filterCategory = null;
+                      _visibleCount = 40;
+                    }),
                   ),
                   for (final cat in ExpenseCategory.all)
                     CategoryChip(
@@ -372,12 +422,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       label: locale.t(categoryLabelKey(cat)),
                       selected: _filterCategory == cat,
                       color: categoryColor(cat),
-                      onTap: () => setState(
-                        () => _filterCategory = _filterCategory == cat ? null : cat,
-                      ),
+                      onTap: () => setState(() {
+                        _filterCategory = _filterCategory == cat ? null : cat;
+                        _visibleCount = 40;
+                      }),
                     ),
                 ],
               ),
+              if (finance.topTags().isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
+                  children: [
+                    for (final tag in finance.topTags())
+                      FilterChip(
+                        label: Text('#$tag', style: const TextStyle(fontSize: 12)),
+                        selected: _filterTag == tag,
+                        onSelected: (selected) => setState(() {
+                          _filterTag = selected ? tag : null;
+                          _visibleCount = 40;
+                        }),
+                      ),
+                  ],
+                ),
+              ],
               const SizedBox(height: 12),
               if (filtersActive)
                 Padding(
@@ -404,21 +473,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
               SectionCard(
                 child: Column(
                   children: [
-                    for (int i = 0; i < filtered.length; i++) ...[
+                    for (int i = 0; i < shownCount; i++) ...[
                       ExpenseListItem(
                         expense: filtered[i],
                         locale: locale,
                         onDelete: () => confirmDeleteExpense(context, filtered[i].id),
                       ),
-                      if (i != filtered.length - 1)
+                      if (i != shownCount - 1)
                         Divider(height: 1, color: theme.colorScheme.outline.withValues(alpha: 0.15)),
                     ],
+                    if (filtered.length > shownCount)
+                      TextButton(
+                        onPressed: () => setState(() => _visibleCount += 40),
+                        child: Text('${locale.t('mostrar_mas')} (${filtered.length - shownCount})'),
+                      ),
                   ],
                 ),
               ),
             ],
             if (_view == 2) ...[
               const UpcomingCharges(),
+              const SubscriptionSuggestions(),
               const BudgetSection(),
               const SizedBox(height: 18),
               const RecurringIncomeSection(),

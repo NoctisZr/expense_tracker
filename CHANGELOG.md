@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.4.0
+Rendimiento (arranque):
+- La pantalla de carga aparece al instante; la base de datos se abre después, con las 4 cajas en paralelo.
+- Las 4 pestañas ya no se construyen todas al inicio: solo la que se abre.
+- Tareas pesadas (recurrentes, papelera, descarga de tasas, respaldo automático) esperan a que la
+  primera pantalla ya esté dibujada. Ventana de arranque nativa con el color de la app (sin negro).
+- Lista de gastos en tandas de 40 y caché de la lista ordenada.
+Funciones nuevas:
+- Cuentas (efectivo, tarjeta, banco, ahorros) con saldos y transferencias entre ellas.
+- Etiquetas (#viaje) y filtro por etiqueta.
+- Detección automática de suscripciones y vista anual.
+- Evolución de tasas (historial local) y alertas ("avísame si 1 USD llega a X BRL").
+- Notificaciones programadas (cobros por vencer, día de pago, recordatorio diario y de respaldo).
+- Atajos al mantener pulsado el icono (añadir gasto, escanear factura, conversor).
+- Reporte PDF con gráfico de barras por categoría.
+Build: tres niveles de respaldo automático (completa, sin notificaciones, lite).
+Compatibilidad: los datos existentes se conservan (campos nuevos opcionales).
+
+## 1.3.2
+- Barra de estado de las tasas rediseñada: compacta (estado + hora de la última descarga
+  en una línea, fecha del proveedor en letra pequeña) con un botón de información que
+  explica las dos fechas, la fuente y las tasas por hora.
+
 ## 1.3.1
 - Tasas de cambio transparentes: se muestran por separado la fecha de los datos del
   proveedor y la de la última descarga, con la fuente; el botón de actualizar avisa si

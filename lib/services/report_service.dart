@@ -102,9 +102,23 @@ class ReportService {
   }) async {
     final List<String> lines =
         buildLines(finance: finance, currency: currency, locale: locale, month: month);
+    // Barras de gasto por categoría (las 8 mayores) para el gráfico del PDF.
+    final DateTime start = DateTime(month.year, month.month, 1);
+    final DateTime end = DateTime(month.year, month.month + 1, 1);
+    final Map<String, double> byCategory = {};
+    for (final e in finance.expensesInPeriod(start, end)) {
+      byCategory[e.category] = (byCategory[e.category] ?? 0) + finance.expenseLocalValue(e, currency);
+    }
+    final List<MapEntry<String, double>> bars = byCategory.entries
+        .map((e) => MapEntry(locale.t(categoryLabelKey(e.key)), e.value))
+        .toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+
     final Uint8List pdf = buildSimplePdf(
       title: '${locale.t('reporte_titulo')} ${month.month.toString().padLeft(2, '0')}/${month.year}',
       lines: lines,
+      barsTitle: '${locale.t('reporte_por_categoria')} (${finance.localCurrency})',
+      bars: bars.take(8).toList(),
     );
     final Directory temp = await getTemporaryDirectory();
     final File file = File(

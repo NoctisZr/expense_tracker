@@ -22,6 +22,7 @@ import '../utils/xlsx_reader.dart';
 import '../utils/currency_list.dart';
 import '../widgets/category_dialogs.dart';
 import '../widgets/mod_gallery.dart';
+import '../widgets/notifications_card.dart';
 import '../widgets/pin_widgets.dart';
 import '../widgets/section_card.dart';
 import '../widgets/settings_dialogs.dart';
@@ -381,6 +382,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ],
               ),
             ),
+            const SizedBox(height: 16),
+            const NotificationsCard(),
             const SizedBox(height: 16),
             SectionCard(
               child: Column(

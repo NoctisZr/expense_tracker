@@ -3,6 +3,7 @@ import 'dart:ui' show PlatformDispatcher;
 import 'package:flutter/material.dart';
 import 'package:hive/hive.dart';
 import '../models/expense.dart';
+import '../models/account.dart';
 import '../models/debt.dart';
 import '../models/income.dart';
 import '../models/recurring_expense.dart';
@@ -64,6 +65,9 @@ class FinanceProvider extends ChangeNotifier {
   static const String _trashKeyPrefix = 'trash_';
   static const String _recurringIncomeKeyPrefix = 'recurringIncome_';
   static const String _debtsKeyPrefix = 'debts_';
+  static const String _accountsKeyPrefix = 'accounts_';
+  static const String _transfersKeyPrefix = 'transfers_';
+  static const String _lastAccountKeyPrefix = 'lastAccount_';
   static const String _budgetModeKey = 'budgetMode';
   static const String _budgetRolloverKey = 'budgetRollover';
   static const String lastExportKey = 'lastExportAt';
@@ -109,8 +113,16 @@ class FinanceProvider extends ChangeNotifier {
     _loadCustomCategories();
     settingsBox.put(schemaVersionKey, currentSchemaVersion);
 
+    // purgeOldTrash() y applyRecurringExpenses() ya NO corren aquí (bloqueaban
+    // el primer fotograma): se llaman desde runStartupTasks() tras dibujar.
+  }
+
+  /// Tareas de arranque que no hace falta hacer antes del primer fotograma:
+  /// vaciar la papelera vencida y registrar los recurrentes que ya vencieron.
+  /// Notifica solo si se creó algo.
+  void runStartupTasks() {
     purgeOldTrash();
-    applyRecurringExpenses();
+    if (applyRecurringExpenses() > 0) notifyListeners();
   }
 
   /// Moneda local del espacio: la propia del espacio, o (para espacios
@@ -150,15 +162,19 @@ class FinanceProvider extends ChangeNotifier {
       workspaceId == personalWorkspaceId ? base : '${base}__$workspaceId';
 
   static Future<_WorkspaceBoxes> _openBoxes(String workspaceId) async {
-    final Box<Expense> expenses =
-        await Hive.openBox<Expense>(boxName(_expensesBase, workspaceId));
-    final Box<Income> incomes =
-        await Hive.openBox<Income>(boxName(_incomesBase, workspaceId));
-    final Box<Vault> vaults =
-        await Hive.openBox<Vault>(boxName(_vaultsBase, workspaceId));
-    final Box<VaultTransaction> txs =
-        await Hive.openBox<VaultTransaction>(boxName(_vaultTxBase, workspaceId));
-    return _WorkspaceBoxes(expenses, incomes, vaults, txs);
+    // Las cuatro cajas se abren en paralelo (antes eran una tras otra).
+    final results = await Future.wait<Object>([
+      Hive.openBox<Expense>(boxName(_expensesBase, workspaceId)),
+      Hive.openBox<Income>(boxName(_incomesBase, workspaceId)),
+      Hive.openBox<Vault>(boxName(_vaultsBase, workspaceId)),
+      Hive.openBox<VaultTransaction>(boxName(_vaultTxBase, workspaceId)),
+    ]);
+    return _WorkspaceBoxes(
+      results[0] as Box<Expense>,
+      results[1] as Box<Income>,
+      results[2] as Box<Vault>,
+      results[3] as Box<VaultTransaction>,
+    );
   }
 
   static List<Workspace> _readWorkspaces(Box box) {
@@ -244,6 +260,9 @@ class FinanceProvider extends ChangeNotifier {
     await settingsBox.delete('$_trashKeyPrefix$id');
     await settingsBox.delete('$_recurringIncomeKeyPrefix$id');
     await settingsBox.delete('$_debtsKeyPrefix$id');
+    await settingsBox.delete('$_accountsKeyPrefix$id');
+    await settingsBox.delete('$_transfersKeyPrefix$id');
+    await settingsBox.delete('$_lastAccountKeyPrefix$id');
     await settingsBox.delete('${_localCurrencyKey}_$id');
     _workspaces = _workspaces.where((w) => w.id != id).toList();
     await _saveWorkspaces();
@@ -391,10 +410,24 @@ class FinanceProvider extends ChangeNotifier {
   // Gastos
   // ---------------------------------------------------------------------
 
+  List<Expense>? _expensesCache;
+
+  /// Gastos del espacio activo, del más reciente al más antiguo. El resultado
+  /// se guarda en caché y se invalida en cada cambio (ver [notifyListeners]):
+  /// antes se reordenaba toda la lista en cada llamada, varias veces por
+  /// fotograma.
   List<Expense> get expenses {
+    final List<Expense>? cached = _expensesCache;
+    if (cached != null) return cached;
     final list = expensesBox.values.toList();
     list.sort((a, b) => b.date.compareTo(a.date));
-    return list;
+    return _expensesCache = list;
+  }
+
+  @override
+  void notifyListeners() {
+    _expensesCache = null;
+    super.notifyListeners();
   }
 
   void addExpense({
@@ -406,6 +439,8 @@ class FinanceProvider extends ChangeNotifier {
     String? note,
     double? localAmount,
     String? receiptPath,
+    String? accountId,
+    List<String>? tags,
   }) {
     final expense = Expense(
       id: generateId(),
@@ -418,6 +453,8 @@ class FinanceProvider extends ChangeNotifier {
       localAmount: localAmount,
       localCurrencyAtCreation: localAmount == null ? null : _localCurrency,
       receiptPath: receiptPath,
+      accountId: accountId,
+      tags: (tags == null || tags.isEmpty) ? null : tags,
     );
     expensesBox.put(expense.id, expense);
     notifyListeners();
@@ -434,6 +471,8 @@ class FinanceProvider extends ChangeNotifier {
     double? localAmount,
     String? localCurrencyAtCreation,
     String? receiptPath,
+    String? accountId,
+    List<String>? tags,
   }) {
     if (!expensesBox.containsKey(id)) return;
     expensesBox.put(
@@ -449,9 +488,24 @@ class FinanceProvider extends ChangeNotifier {
         localAmount: localAmount,
         localCurrencyAtCreation: localCurrencyAtCreation,
         receiptPath: receiptPath,
+        accountId: accountId,
+        tags: (tags == null || tags.isEmpty) ? null : tags,
       ),
     );
     notifyListeners();
+  }
+
+  /// Las etiquetas más usadas (para los filtros y las sugerencias).
+  List<String> topTags({int limit = 8}) {
+    final Map<String, int> counts = {};
+    for (final e in expensesBox.values) {
+      for (final tag in e.tags ?? const <String>[]) {
+        counts[tag] = (counts[tag] ?? 0) + 1;
+      }
+    }
+    final List<String> sorted = counts.keys.toList()
+      ..sort((a, b) => counts[b]!.compareTo(counts[a]!));
+    return sorted.take(limit).toList();
   }
 
   /// Sugerencias de nombre a partir de tus gastos anteriores (los más
@@ -1094,6 +1148,177 @@ class FinanceProvider extends ChangeNotifier {
   }
 
   // ---------------------------------------------------------------------
+  // Cuentas y transferencias
+  // ---------------------------------------------------------------------
+
+  String get _accountsKey => '$_accountsKeyPrefix$_workspaceId';
+  String get _transfersKey => '$_transfersKeyPrefix$_workspaceId';
+  String get _lastAccountKey => '$_lastAccountKeyPrefix$_workspaceId';
+
+  List<Account> get accounts {
+    final dynamic raw = settingsBox.get(_accountsKey);
+    final List<Account> result = [];
+    if (raw is List) {
+      for (final item in raw) {
+        if (item is Map) {
+          try {
+            result.add(Account.fromMap(item));
+          } catch (_) {}
+        }
+      }
+    }
+    return result;
+  }
+
+  Future<void> _saveAccounts(List<Account> list) async {
+    await settingsBox.put(_accountsKey, list.map((a) => a.toMap()).toList());
+  }
+
+  List<Transfer> get transfers {
+    final dynamic raw = settingsBox.get(_transfersKey);
+    final List<Transfer> result = [];
+    if (raw is List) {
+      for (final item in raw) {
+        if (item is Map) {
+          try {
+            result.add(Transfer.fromMap(item));
+          } catch (_) {}
+        }
+      }
+    }
+    result.sort((a, b) => b.date.compareTo(a.date));
+    return result;
+  }
+
+  Future<void> _saveTransfers(List<Transfer> list) async {
+    await settingsBox.put(_transfersKey, list.map((t) => t.toMap()).toList());
+  }
+
+  /// Última cuenta usada (se preselecciona al registrar un gasto o ingreso).
+  String? get lastAccountId {
+    final dynamic id = settingsBox.get(_lastAccountKey);
+    if (id is! String) return null;
+    return accounts.any((a) => a.id == id) ? id : null;
+  }
+
+  void setLastAccountId(String? id) {
+    if (id == null) {
+      settingsBox.delete(_lastAccountKey);
+    } else {
+      settingsBox.put(_lastAccountKey, id);
+    }
+  }
+
+  void addAccount({
+    required String name,
+    required String type,
+    required String currency,
+    required double initialBalance,
+  }) {
+    final List<Account> list = accounts
+      ..add(Account(
+        id: generateId(),
+        name: name.trim(),
+        type: type,
+        currency: currency,
+        initialBalance: initialBalance,
+      ));
+    _saveAccounts(list);
+    notifyListeners();
+  }
+
+  void updateAccount({
+    required String id,
+    required String name,
+    required String type,
+    required double initialBalance,
+  }) {
+    _saveAccounts(accounts
+        .map((a) => a.id == id ? a.copyWith(name: name.trim(), type: type, initialBalance: initialBalance) : a)
+        .toList());
+    notifyListeners();
+  }
+
+  /// Borra la cuenta. Sus gastos e ingresos no se borran: quedan "sin cuenta".
+  void deleteAccount(String id) {
+    for (final e in expensesBox.values.where((e) => e.accountId == id).toList()) {
+      e.accountId = null;
+      expensesBox.put(e.id, e);
+    }
+    for (final i in incomesBox.values.where((i) => i.accountId == id).toList()) {
+      i.accountId = null;
+      incomesBox.put(i.id, i);
+    }
+    _saveTransfers(transfers.where((t) => t.fromId != id && t.toId != id).toList());
+    _saveAccounts(accounts.where((a) => a.id != id).toList());
+    if (settingsBox.get(_lastAccountKey) == id) settingsBox.delete(_lastAccountKey);
+    notifyListeners();
+  }
+
+  void addTransfer({
+    required String fromId,
+    required String toId,
+    required double fromAmount,
+    required double toAmount,
+  }) {
+    final List<Transfer> list = transfers
+      ..add(Transfer(
+        id: generateId(),
+        fromId: fromId,
+        toId: toId,
+        fromAmount: fromAmount,
+        toAmount: toAmount,
+        date: DateTime.now(),
+      ));
+    _saveTransfers(list);
+    notifyListeners();
+  }
+
+  void deleteTransfer(String id) {
+    _saveTransfers(transfers.where((t) => t.id != id).toList());
+    notifyListeners();
+  }
+
+  /// Saldo actual de la cuenta en su propia divisa: saldo inicial + ingresos
+  /// asignados - gastos asignados +/- transferencias.
+  double accountBalance(Account account, CurrencyProvider currency) {
+    double balance = account.initialBalance;
+    for (final e in expensesBox.values) {
+      if (e.accountId == account.id) {
+        balance -= currency.convert(e.amount, e.currency, account.currency);
+      }
+    }
+    for (final i in incomesBox.values) {
+      if (i.accountId == account.id) {
+        balance += currency.convert(i.amount, i.currency, account.currency);
+      }
+    }
+    for (final t in transfers) {
+      if (t.fromId == account.id) balance -= t.fromAmount;
+      if (t.toId == account.id) balance += t.toAmount;
+    }
+    return balance;
+  }
+
+  // ---------------------------------------------------------------------
+  // Suscripciones detectadas que el usuario descartó
+  // ---------------------------------------------------------------------
+
+  static const String _ignoredSubsKey = 'ignoredSubscriptions';
+
+  Set<String> get ignoredSubscriptionNames {
+    final dynamic raw = settingsBox.get(_ignoredSubsKey);
+    if (raw is List) return raw.map((e) => e.toString().toLowerCase()).toSet();
+    return <String>{};
+  }
+
+  void ignoreSubscription(String name) {
+    final Set<String> set = ignoredSubscriptionNames..add(name.trim().toLowerCase());
+    settingsBox.put(_ignoredSubsKey, set.toList());
+    notifyListeners();
+  }
+
+  // ---------------------------------------------------------------------
   // Deudas y préstamos
   // ---------------------------------------------------------------------
 
@@ -1167,6 +1392,7 @@ class FinanceProvider extends ChangeNotifier {
     required double amount,
     required String currency,
     DateTime? date,
+    String? accountId,
   }) {
     final income = Income(
       id: generateId(),
@@ -1174,6 +1400,7 @@ class FinanceProvider extends ChangeNotifier {
       amount: amount,
       currency: currency,
       date: date ?? DateTime.now(),
+      accountId: accountId,
     );
     incomesBox.put(income.id, income);
     notifyListeners();
@@ -1185,9 +1412,11 @@ class FinanceProvider extends ChangeNotifier {
     required double amount,
     required String currency,
     required DateTime date,
+    String? accountId,
   }) {
     final Income? income = incomesBox.get(id);
     if (income == null) return;
+    income.accountId = accountId;
     income.label = label;
     income.amount = amount;
     income.currency = currency;
@@ -1353,7 +1582,7 @@ class FinanceProvider extends ChangeNotifier {
   Map<String, dynamic> exportData() {
     return {
       'exportedAt': DateTime.now().toIso8601String(),
-      'formatVersion': 4,
+      'formatVersion': 5,
       'workspaceName': activeWorkspace.name,
       'localCurrency': _localCurrency,
       'expenses': expensesBox.values.map((e) => e.toJson()).toList(),
@@ -1365,6 +1594,8 @@ class FinanceProvider extends ChangeNotifier {
       'customCategories': CategoryRegistry.custom.map((c) => c.toMap()).toList(),
       'recurringIncomes': recurringIncomes.map((r) => r.toMap()).toList(),
       'debts': debts.map((d) => d.toMap()).toList(),
+      'accounts': accounts.map((a) => a.toMap()).toList(),
+      'transfers': transfers.map((t) => t.toMap()).toList(),
     };
   }
 
@@ -1501,6 +1732,34 @@ class FinanceProvider extends ChangeNotifier {
         }
       }
       await _saveDebts(imported);
+    }
+
+    final dynamic accountsJson = data['accounts'];
+    if (accountsJson is List) {
+      final List<Account> imported = merge ? accounts : [];
+      for (final item in accountsJson) {
+        if (item is Map) {
+          try {
+            final Account a = Account.fromMap(item);
+            if (!imported.any((x) => x.id == a.id)) imported.add(a);
+          } catch (_) {}
+        }
+      }
+      await _saveAccounts(imported);
+    }
+
+    final dynamic transfersJson = data['transfers'];
+    if (transfersJson is List) {
+      final List<Transfer> imported = merge ? transfers : [];
+      for (final item in transfersJson) {
+        if (item is Map) {
+          try {
+            final Transfer t = Transfer.fromMap(item);
+            if (!imported.any((x) => x.id == t.id)) imported.add(t);
+          } catch (_) {}
+        }
+      }
+      await _saveTransfers(imported);
     }
 
     notifyListeners();

@@ -40,6 +40,12 @@ class Expense {
   /// Ruta de la foto de la factura (copiada al almacenamiento de la app).
   String? receiptPath;
 
+  /// Cuenta de la que salió el dinero (opcional, v1.4).
+  String? accountId;
+
+  /// Etiquetas libres en minúscula (opcional, v1.4).
+  List<String>? tags;
+
   Expense({
     required this.id,
     required this.name,
@@ -51,6 +57,8 @@ class Expense {
     this.localAmount,
     this.localCurrencyAtCreation,
     this.receiptPath,
+    this.accountId,
+    this.tags,
   });
 
   Map<String, dynamic> toJson() => {
@@ -64,6 +72,8 @@ class Expense {
         if (localAmount != null) 'localAmount': localAmount,
         if (localCurrencyAtCreation != null) 'localCurrencyAtCreation': localCurrencyAtCreation,
         if (receiptPath != null) 'receiptPath': receiptPath,
+        if (accountId != null) 'accountId': accountId,
+        if (tags != null && tags!.isNotEmpty) 'tags': tags,
       };
 
   factory Expense.fromJson(Map<String, dynamic> json) => Expense(
@@ -77,6 +87,8 @@ class Expense {
         localAmount: (json['localAmount'] as num?)?.toDouble(),
         localCurrencyAtCreation: json['localCurrencyAtCreation'] as String?,
         receiptPath: json['receiptPath'] as String?,
+        accountId: json['accountId'] as String?,
+        tags: (json['tags'] as List?)?.map((e) => e.toString()).toList(),
       );
 }
 
@@ -107,13 +119,16 @@ class ExpenseAdapter extends TypeAdapter<Expense> {
       localCurrencyAtCreation: fields[8] as String?,
       // Campo añadido en la v1.3.
       receiptPath: fields[9] as String?,
+      // Campos añadidos en la v1.4.
+      accountId: fields[10] as String?,
+      tags: (fields[11] as List?)?.map((e) => e.toString()).toList(),
     );
   }
 
   @override
   void write(BinaryWriter writer, Expense obj) {
     writer
-      ..writeByte(10)
+      ..writeByte(12)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -133,6 +148,10 @@ class ExpenseAdapter extends TypeAdapter<Expense> {
       ..writeByte(8)
       ..write(obj.localCurrencyAtCreation)
       ..writeByte(9)
-      ..write(obj.receiptPath);
+      ..write(obj.receiptPath)
+      ..writeByte(10)
+      ..write(obj.accountId)
+      ..writeByte(11)
+      ..write(obj.tags);
   }
 }

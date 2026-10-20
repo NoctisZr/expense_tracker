@@ -27,53 +27,9 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: Generar el andamiaje nativo de Android
+      - name: Generar el andamiaje nativo de Android (plantilla de referencia)
         run: |
           flutter create --platforms=android --org com.noctis.expensetracker --project-name expense_tracker /tmp/scaffold
-          cp -r /tmp/scaffold/android .
-
-      - name: Agregar el permiso de Internet al AndroidManifest
-        run: |
-          MANIFEST="android/app/src/main/AndroidManifest.xml"
-          if ! grep -q "android.permission.INTERNET" "$MANIFEST"; then
-            sed -i '/<manifest /a\    <uses-permission android:name="android.permission.INTERNET"/>' "$MANIFEST"
-          fi
-          cat "$MANIFEST"
-
-      - name: Preparar la huella dactilar (MainActivity y permiso)
-        run: |
-          MANIFEST="android/app/src/main/AndroidManifest.xml"
-          if ! grep -q "android.permission.USE_BIOMETRIC" "$MANIFEST"; then
-            sed -i '/<manifest /a\    <uses-permission android:name="android.permission.USE_BIOMETRIC"/>' "$MANIFEST"
-          fi
-          MAIN=$(find android/app/src/main -name 'MainActivity.kt' | head -n 1)
-          if [ -n "$MAIN" ]; then
-            sed -i 's/import io.flutter.embedding.android.FlutterActivity/import io.flutter.embedding.android.FlutterFragmentActivity/; s/FlutterActivity()/FlutterFragmentActivity()/' "$MAIN"
-            cat "$MAIN"
-          else
-            echo "::warning::No se encontró MainActivity.kt; la huella podría no funcionar (el PIN sí)."
-          fi
-
-      - name: Configurar la firma estable del APK (si hay secretos)
-        env:
-          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: |
-          if [ -z "$KEYSTORE_B64" ]; then
-            echo "::warning::No hay secretos de firma. El APK se firmará con la clave de depuración y cada build tendrá una firma distinta (no se podrá instalar encima del anterior)."
-            exit 0
-          fi
-          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/upload-keystore.jks"
-          {
-            echo "android.injected.signing.store.file=$RUNNER_TEMP/upload-keystore.jks"
-            echo "android.injected.signing.store.password=$KEYSTORE_PASSWORD"
-            echo "android.injected.signing.key.alias=$KEY_ALIAS"
-            echo "android.injected.signing.key.password=$KEY_PASSWORD"
-          } >> android/gradle.properties
-          echo "SIGNED=true" >> "$GITHUB_ENV"
-          echo "Firma estable configurada."
 
       - name: Analizar el código (informativo, no bloquea el build)
         run: flutter analyze || true
@@ -81,22 +37,13 @@ jobs:
       - name: Pruebas unitarias (informativo, no bloquea el build)
         run: flutter test || true
 
-      - name: Compilar el APK en modo release (con plan B "lite" si falla)
-        run: |
-          make_lite() {
-            sed -i '/google_mlkit_text_recognition/d;/local_auth:/d' pubspec.yaml
-            cp tool/lite/receipt_ocr_service.dart lib/services/receipt_ocr_service.dart
-            cp tool/lite/biometric_service.dart lib/services/biometric_service.dart
-          }
-          if flutter pub get && flutter build apk --release; then
-            echo "BUILD_MODE=completa" >> "$GITHUB_ENV"
-          else
-            echo "::warning::El build completo falló. Reintentando en modo lite (sin escaneo de facturas ni huella)."
-            make_lite
-            flutter pub get
-            flutter build apk --release
-            echo "BUILD_MODE=lite" >> "$GITHUB_ENV"
-          fi
+      - name: Compilar el APK (patch de Android, firma y planes de respaldo)
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: bash tool/ci_build.sh
 
       - name: Mostrar con qué certificado quedó firmado el APK
         run: |

@@ -256,3 +256,26 @@ Notificaciones push, widget de pantalla de inicio y sincronización en la nube.
 - **Editor de mods**: Ajustes → Personalización → Crear mod. Eliges un color de acento
   y "oscuro/claro", se genera la paleta, ves la vista previa y guardas en "Mis mods".
   También puedes pegar el texto (JSON) de un mod, editarlo, duplicarlo y compartirlo.
+
+
+## Novedades de la v1.4
+
+**Arranque más rápido**: pantalla de carga inmediata, base de datos abierta en paralelo,
+pestañas construidas bajo demanda, tareas pesadas diferidas, ventana nativa sin pantalla
+negra, lista de gastos paginada y con caché.
+
+**Nuevas funciones**
+- **Cuentas** con saldo y **transferencias**; elige la cuenta al registrar gastos e ingresos.
+- **Etiquetas** y filtro por etiqueta.
+- **Suscripciones detectadas** (te propone convertirlas en recurrentes) y **vista anual**.
+- **Evolución de la tasa** y **alertas de tasa** (desde el Conversor).
+- **Notificaciones** locales: cobros por vencer, día de pago, recordatorio diario y de respaldo.
+- **Atajos** al mantener pulsado el icono de la app.
+- **PDF** con gráfico de barras.
+
+**Build con tres niveles**: `tool/ci_build.sh` intenta (1) completa, (2) sin notificaciones
+ni atajos, (3) lite. El nombre del release indica el modo usado.
+
+### Fuera de alcance
+Respaldo automático a Google Drive (requiere configurar OAuth en Google Cloud), widget de
+pantalla de inicio (se reemplazó por atajos del icono), escaneo de códigos QR y más idiomas.

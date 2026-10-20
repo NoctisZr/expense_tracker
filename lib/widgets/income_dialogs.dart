@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/income.dart';
 import '../providers/finance_provider.dart';
+import 'account_widgets.dart';
 import '../providers/locale_provider.dart';
 import '../utils/formatters.dart';
 import 'currency_dropdown.dart';
@@ -24,6 +25,7 @@ class _AddIncomeDialogState extends State<_AddIncomeDialog> {
   late final TextEditingController _amountController;
   late String _currency;
   late DateTime _date;
+  String? _accountId;
   String? _error;
 
   @override
@@ -35,6 +37,7 @@ class _AddIncomeDialogState extends State<_AddIncomeDialog> {
         TextEditingController(text: i == null ? '' : i.amount.toStringAsFixed(2));
     _currency = i?.currency ?? context.read<FinanceProvider>().localCurrency;
     _date = i?.date ?? DateTime.now();
+    _accountId = i?.accountId ?? context.read<FinanceProvider>().lastAccountId;
   }
 
   @override
@@ -73,6 +76,7 @@ class _AddIncomeDialogState extends State<_AddIncomeDialog> {
         amount: amount,
         currency: _currency,
         date: _date,
+        accountId: _accountId,
       );
     } else {
       finance.updateIncome(
@@ -81,6 +85,7 @@ class _AddIncomeDialogState extends State<_AddIncomeDialog> {
         amount: amount,
         currency: _currency,
         date: _date,
+        accountId: _accountId,
       );
     }
     Navigator.of(context).pop();
@@ -139,6 +144,8 @@ class _AddIncomeDialogState extends State<_AddIncomeDialog> {
                 ),
               ),
             ),
+            const SizedBox(height: 8),
+            AccountDropdown(value: _accountId, onChanged: (id) => setState(() => _accountId = id)),
             if (_error != null) ...[
               const SizedBox(height: 10),
               Text(_error!, style: const TextStyle(color: Colors.redAccent, fontSize: 12.5)),

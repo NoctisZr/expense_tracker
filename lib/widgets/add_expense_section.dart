@@ -6,6 +6,8 @@ import '../providers/finance_provider.dart';
 import '../providers/locale_provider.dart';
 import '../utils/budget_utils.dart';
 import '../utils/formatters.dart';
+import '../utils/tag_utils.dart';
+import 'account_widgets.dart';
 import 'category_selector_row.dart';
 import 'currency_dropdown.dart';
 import 'receipt_flow.dart';
@@ -22,7 +24,9 @@ class _AddExpenseSectionState extends State<AddExpenseSection> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _amountController = TextEditingController();
   final TextEditingController _noteController = TextEditingController();
+  final TextEditingController _tagsController = TextEditingController();
   final FocusNode _nameFocus = FocusNode();
+  String? _accountId;
   String _category = ExpenseCategory.compras;
   late String _currency;
   DateTime _date = DateTime.now();
@@ -32,7 +36,9 @@ class _AddExpenseSectionState extends State<AddExpenseSection> {
   @override
   void initState() {
     super.initState();
-    _currency = context.read<FinanceProvider>().localCurrency;
+    final finance = context.read<FinanceProvider>();
+    _currency = finance.localCurrency;
+    _accountId = finance.lastAccountId;
   }
 
   @override
@@ -40,6 +46,7 @@ class _AddExpenseSectionState extends State<AddExpenseSection> {
     _nameController.dispose();
     _amountController.dispose();
     _noteController.dispose();
+    _tagsController.dispose();
     _nameFocus.dispose();
     super.dispose();
   }
@@ -108,7 +115,10 @@ class _AddExpenseSectionState extends State<AddExpenseSection> {
       date: _date,
       note: note,
       localAmount: localAmount,
+      accountId: _accountId,
+      tags: parseTags(_tagsController.text),
     );
+    finance.setLastAccountId(_accountId);
 
     if (split > 1 && _splitCreateDebt && total - amount > 0.009) {
       finance.addDebt(
@@ -122,6 +132,7 @@ class _AddExpenseSectionState extends State<AddExpenseSection> {
     _nameController.clear();
     _amountController.clear();
     _noteController.clear();
+    _tagsController.clear();
     FocusScope.of(context).unfocus();
     setState(() {
       _date = DateTime.now();
@@ -260,7 +271,15 @@ class _AddExpenseSectionState extends State<AddExpenseSection> {
             textCapitalization: TextCapitalization.sentences,
             decoration: InputDecoration(labelText: locale.t('nota_opcional')),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _tagsController,
+            autocorrect: false,
+            decoration: InputDecoration(labelText: locale.t('etiquetas_opcional')),
+          ),
+          const SizedBox(height: 8),
+          AccountDropdown(value: _accountId, onChanged: (id) => setState(() => _accountId = id)),
+          const SizedBox(height: 8),
           Row(
             children: [
               OutlinedButton.icon(

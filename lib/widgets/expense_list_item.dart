@@ -5,6 +5,7 @@ import '../providers/finance_provider.dart';
 import '../providers/locale_provider.dart';
 import '../utils/category_style.dart';
 import '../utils/formatters.dart';
+import '../utils/tag_utils.dart';
 import 'expense_dialogs.dart';
 
 /// Muestra el diálogo de confirmación para eliminar un gasto y, si se
@@ -86,6 +87,13 @@ class ExpenseListItem extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.bodySmall,
                 ),
+                if (expense.tags != null && expense.tags!.isNotEmpty)
+                  Text(
+                    tagsToText(expense.tags),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.primary),
+                  ),
                 if (expense.note != null && expense.note!.isNotEmpty)
                   Text(
                     expense.note!,

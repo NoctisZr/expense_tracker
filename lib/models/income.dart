@@ -9,12 +9,16 @@ class Income {
   String currency;
   DateTime date;
 
+  /// Cuenta en la que entró el dinero (opcional, v1.4).
+  String? accountId;
+
   Income({
     required this.id,
     required this.label,
     required this.amount,
     required this.currency,
     required this.date,
+    this.accountId,
   });
 
   Map<String, dynamic> toJson() => {
@@ -23,6 +27,7 @@ class Income {
         'amount': amount,
         'currency': currency,
         'date': date.toIso8601String(),
+        if (accountId != null) 'accountId': accountId,
       };
 
   factory Income.fromJson(Map<String, dynamic> json) => Income(
@@ -31,6 +36,7 @@ class Income {
         amount: (json['amount'] as num).toDouble(),
         currency: json['currency'] as String,
         date: DateTime.parse(json['date'] as String),
+        accountId: json['accountId'] as String?,
       );
 }
 
@@ -51,13 +57,15 @@ class IncomeAdapter extends TypeAdapter<Income> {
       amount: (fields[2] as num).toDouble(),
       currency: fields[3] as String,
       date: fields[4] as DateTime,
+      // Campo añadido en la v1.4: los ingresos antiguos no lo tienen (null).
+      accountId: fields[5] as String?,
     );
   }
 
   @override
   void write(BinaryWriter writer, Income obj) {
     writer
-      ..writeByte(5)
+      ..writeByte(6)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -67,6 +75,8 @@ class IncomeAdapter extends TypeAdapter<Income> {
       ..writeByte(3)
       ..write(obj.currency)
       ..writeByte(4)
-      ..write(obj.date);
+      ..write(obj.date)
+      ..writeByte(5)
+      ..write(obj.accountId);
   }
 }

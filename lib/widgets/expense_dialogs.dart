@@ -5,6 +5,8 @@ import '../providers/currency_provider.dart';
 import '../providers/finance_provider.dart';
 import '../providers/locale_provider.dart';
 import '../utils/formatters.dart';
+import '../utils/tag_utils.dart';
+import 'account_widgets.dart';
 import 'category_selector_row.dart';
 import 'currency_dropdown.dart';
 import 'receipt_flow.dart';
@@ -30,6 +32,8 @@ class _EditExpenseDialogState extends State<_EditExpenseDialog> {
   late final TextEditingController _nameController;
   late final TextEditingController _amountController;
   late final TextEditingController _noteController;
+  late final TextEditingController _tagsController;
+  String? _accountId;
   late String _currency;
   late String _category;
   late DateTime _date;
@@ -41,6 +45,8 @@ class _EditExpenseDialogState extends State<_EditExpenseDialog> {
     _amountController =
         TextEditingController(text: widget.expense.amount.toStringAsFixed(2));
     _noteController = TextEditingController(text: widget.expense.note ?? '');
+    _tagsController = TextEditingController(text: tagsToText(widget.expense.tags));
+    _accountId = widget.expense.accountId;
     _currency = widget.expense.currency;
     _category = widget.expense.category;
     _date = widget.expense.date;
@@ -51,6 +57,7 @@ class _EditExpenseDialogState extends State<_EditExpenseDialog> {
     _nameController.dispose();
     _amountController.dispose();
     _noteController.dispose();
+    _tagsController.dispose();
     super.dispose();
   }
 
@@ -109,6 +116,8 @@ class _EditExpenseDialogState extends State<_EditExpenseDialog> {
       localAmount: localAmount,
       localCurrencyAtCreation: localCurrencyAtCreation,
       receiptPath: widget.expense.receiptPath,
+      accountId: _accountId,
+      tags: parseTags(_tagsController.text),
     );
     Navigator.of(context).pop();
   }
@@ -160,6 +169,15 @@ class _EditExpenseDialogState extends State<_EditExpenseDialog> {
               decoration: InputDecoration(labelText: locale.t('nota_opcional')),
             ),
             const SizedBox(height: 12),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _tagsController,
+              autocorrect: false,
+              decoration: InputDecoration(labelText: locale.t('etiquetas_opcional')),
+            ),
+            const SizedBox(height: 8),
+            AccountDropdown(value: _accountId, onChanged: (id) => setState(() => _accountId = id)),
+            const SizedBox(height: 8),
             if (widget.expense.receiptPath != null) ...[
               TextButton.icon(
                 onPressed: () => showReceiptViewer(context, widget.expense.receiptPath!),

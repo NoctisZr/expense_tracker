@@ -1,10 +1,15 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-/// Generador mínimo de PDF de solo texto (Helvetica, A4), escrito sin
-/// paquetes externos. Admite caracteres Latin-1 (acentos y ñ); el resto se
-/// sustituye por "?".
-Uint8List buildSimplePdf({required String title, required List<String> lines}) {
+/// Generador mínimo de PDF (Helvetica, A4) escrito sin paquetes externos:
+/// título, un gráfico de barras horizontales opcional y líneas de texto.
+/// Admite caracteres Latin-1 (acentos y ñ); el resto se sustituye por "?".
+Uint8List buildSimplePdf({
+  required String title,
+  required List<String> lines,
+  String? barsTitle,
+  List<MapEntry<String, double>>? bars,
+}) {
   const double pageWidth = 595;
   const double pageHeight = 842;
   const double margin = 50;
@@ -28,6 +33,7 @@ Uint8List buildSimplePdf({required String title, required List<String> lines}) {
   }
 
   String escape(String s) => s.replaceAll(r'\', r'\\').replaceAll('(', r'\(').replaceAll(')', r'\)');
+  String n2(double v) => v.toStringAsFixed(2);
 
   // Ajuste de líneas largas.
   final List<String> wrapped = [];
@@ -47,18 +53,30 @@ Uint8List buildSimplePdf({required String title, required List<String> lines}) {
     wrapped.add(rest);
   }
 
-  final int linesPerPage = ((pageHeight - 2 * margin - 30) / leading).floor();
-  final List<List<String>> pages = [];
-  for (int i = 0; i < wrapped.length; i += linesPerPage) {
-    pages.add(wrapped.sublist(i, i + linesPerPage > wrapped.length ? wrapped.length : i + linesPerPage));
-  }
-  if (pages.isEmpty) pages.add(<String>[]);
+  final List<MapEntry<String, double>> chartBars =
+      (bars ?? const <MapEntry<String, double>>[]).where((e) => e.value > 0).take(10).toList();
+  final bool hasChart = chartBars.isNotEmpty;
+  final double chartHeight = hasChart ? 20 + chartBars.length * 15 + 10 : 0;
 
-  // Objetos: 1 catálogo, 2 páginas, 3 fuente, luego (página, contenido) por página.
+  // Capacidad de líneas: la primera página pierde el espacio del gráfico.
+  final int fullCapacity = ((pageHeight - 2 * margin - 30) / leading).floor();
+  int firstCapacity = ((pageHeight - 2 * margin - 30 - chartHeight) / leading).floor();
+  if (firstCapacity < 4) firstCapacity = 4;
+
+  final List<List<String>> pages = [];
+  int cursor = 0;
+  while (cursor < wrapped.length || pages.isEmpty) {
+    final int capacity = pages.isEmpty ? firstCapacity : fullCapacity;
+    final int end = cursor + capacity > wrapped.length ? wrapped.length : cursor + capacity;
+    pages.add(wrapped.sublist(cursor, end));
+    cursor = end;
+    if (cursor >= wrapped.length) break;
+  }
+
   final List<List<int>> objects = [];
   List<int> bytes(String s) => latin1.encode(s);
 
-  final int firstPageObj = 4;
+  const int firstPageObj = 4;
   final List<String> kids = [for (int i = 0; i < pages.length; i++) '${firstPageObj + i * 2} 0 R'];
 
   objects.add(bytes('<< /Type /Catalog /Pages 2 0 R >>'));
@@ -72,26 +90,48 @@ Uint8List buildSimplePdf({required String title, required List<String> lines}) {
       '/Resources << /Font << /F1 3 0 R >> >> /Contents $contentObj 0 R >>',
     ));
 
-    final StringBuffer content = StringBuffer('BT\n');
+    final StringBuffer content = StringBuffer();
     double y = pageHeight - margin;
+
     if (p == 0) {
-      content.write('/F1 16 Tf\n$margin $y Td\n(${escape(clean(title))}) Tj\n');
-      y = -26; // desplazamiento relativo bajo el título
-      content.write('/F1 10 Tf\n$leading TL\n0 $y Td\n');
-    } else {
-      content.write('/F1 10 Tf\n$leading TL\n$margin $y Td\n');
+      content.write('BT\n/F1 16 Tf\n${n2(margin)} ${n2(y)} Td\n(${escape(clean(title))}) Tj\nET\n');
+      y -= 30;
+
+      if (hasChart) {
+        if (barsTitle != null) {
+          content.write('BT\n/F1 11 Tf\n${n2(margin)} ${n2(y)} Td\n(${escape(clean(barsTitle))}) Tj\nET\n');
+        }
+        y -= 20;
+        final double maxValue = chartBars.map((e) => e.value).reduce((a, b) => a > b ? a : b);
+        const double labelWidth = 150;
+        const double maxBarWidth = 250;
+        for (final bar in chartBars) {
+          final double width = (bar.value / maxValue * maxBarWidth).clamp(2.0, maxBarWidth).toDouble();
+          String label = clean(bar.key);
+          if (label.length > 26) label = '${label.substring(0, 25)}.';
+          content.write('BT\n/F1 9 Tf\n${n2(margin)} ${n2(y)} Td\n(${escape(label)}) Tj\nET\n');
+          content.write('q\n0.15 0.65 0.55 rg\n${n2(margin + labelWidth)} ${n2(y - 2)} ${n2(width)} 9 re f\nQ\n');
+          content.write(
+            'BT\n/F1 8 Tf\n${n2(margin + labelWidth + width + 6)} ${n2(y)} Td\n(${escape(bar.value.toStringAsFixed(0))}) Tj\nET\n',
+          );
+          y -= 15;
+        }
+        y -= 10;
+      }
     }
+
+    content.write('BT\n/F1 10 Tf\n${n2(leading)} TL\n${n2(margin)} ${n2(y)} Td\n');
     for (final line in pages[p]) {
       content.write('(${escape(line)}) Tj T*\n');
     }
     content.write('ET');
+
     final List<int> stream = bytes(content.toString());
-    final List<int> obj = [
+    objects.add([
       ...bytes('<< /Length ${stream.length} >>\nstream\n'),
       ...stream,
       ...bytes('\nendstream'),
-    ];
-    objects.add(obj);
+    ]);
   }
 
   final BytesBuilder out = BytesBuilder();
