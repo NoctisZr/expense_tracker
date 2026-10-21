@@ -70,7 +70,9 @@ attempt() {   # $1 = etiqueta, $2 = 1 con notificaciones / 0 sin ellas
   local label="$1" log="$LOGDIR/build_$1.log" status
   echo "=============== Intento: $label ==============="
   prepare_android "$2"
-  { flutter pub get && flutter build apk --release; } 2>&1 | tee "$log"
+  # --split-per-abi: un APK por arquitectura (el "gordo" repite el motor y ML Kit 3 veces).
+  # --split-debug-info: quita los símbolos de depuración de libapp.so (más pequeño).
+  { flutter pub get && flutter build apk --release --split-per-abi --split-debug-info=build/symbols; } 2>&1 | tee "$log"
   status=${PIPESTATUS[0]}
   if [ "$status" -ne 0 ]; then summarize_failure "$label" "$log"; fi
   return "$status"

@@ -279,3 +279,9 @@ ni atajos, (3) lite. El nombre del release indica el modo usado.
 ### Fuera de alcance
 Respaldo automático a Google Drive (requiere configurar OAuth en Google Cloud), widget de
 pantalla de inicio (se reemplazó por atajos del icono), escaneo de códigos QR y más idiomas.
+
+
+### Qué APK instalar (v1.4.2)
+El release incluye dos APK: **`app-arm64-v8a-release.apk`** (casi todos los teléfonos desde ~2016)
+y `app-armeabi-v7a-release.apk` (solo teléfonos muy antiguos de 32 bits). Cada uno pesa
+aproximadamente un tercio del APK único anterior.

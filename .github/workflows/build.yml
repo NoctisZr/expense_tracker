@@ -45,14 +45,24 @@ jobs:
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: bash tool/ci_build.sh
 
-      - name: Mostrar con qué certificado quedó firmado el APK
+      - name: Mostrar tamaños y con qué certificado quedó firmado el APK
         run: |
+          APK_DIR=build/app/outputs/flutter-apk
+          {
+            echo "### Tamaño de los APK"
+            echo '```'
+            ls -lh "$APK_DIR"/*-release.apk | awk '{print $5, $9}'
+            echo '```'
+            echo "Instala **app-arm64-v8a-release.apk** (casi todos los teléfonos desde ~2016). El de armeabi-v7a es solo para teléfonos muy antiguos de 32 bits."
+          } >> "$GITHUB_STEP_SUMMARY"
           APKSIGNER=$(ls -d "$ANDROID_HOME"/build-tools/*/apksigner 2>/dev/null | sort -V | tail -n 1)
           if [ -z "$APKSIGNER" ]; then
             echo "apksigner no encontrado; se omite la verificación."
             exit 0
           fi
-          OUT=$("$APKSIGNER" verify --print-certs build/app/outputs/flutter-apk/app-release.apk 2>&1 || true)
+          APK=$(ls "$APK_DIR"/*arm64-v8a-release.apk 2>/dev/null | head -n 1)
+          if [ -z "$APK" ]; then APK=$(ls "$APK_DIR"/*.apk | head -n 1); fi
+          OUT=$("$APKSIGNER" verify --print-certs "$APK" 2>&1 || true)
           echo "$OUT"
           {
             echo "### Certificado del APK (modo: ${BUILD_MODE:-?})"
@@ -68,16 +78,21 @@ jobs:
             fi
           fi
 
-      - name: Subir el APK como artifact de esta ejecución
+      - name: Subir los APK como artifact de esta ejecución
         uses: actions/upload-artifact@v4
         with:
           name: expense-tracker-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
+          path: |
+            build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+            build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
           if-no-files-found: error
 
-      - name: Publicar el APK en un Release descargable
+      - name: Publicar los APK en un Release descargable
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
           name: "Expense Tracker — build #${{ github.run_number }} (${{ env.BUILD_MODE }})"
-          files: build/app/outputs/flutter-apk/app-release.apk
+          body: "Instala **app-arm64-v8a-release.apk** (casi todos los teléfonos). El de armeabi-v7a es solo para teléfonos muy antiguos de 32 bits."
+          files: |
+            build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+            build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk

@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.4.2
+- APK más liviano: se compila un APK por arquitectura (`--split-per-abi`) y sin símbolos de
+  depuración (`--split-debug-info`). El APK "gordo" repetía el motor de Flutter y ML Kit tres
+  veces (~100 MB). Se publican `app-arm64-v8a-release.apk` (casi todos los teléfonos) y
+  `app-armeabi-v7a-release.apk` (teléfonos muy antiguos de 32 bits).
+- El resumen de la ejecución muestra el tamaño de cada APK.
+
 ## 1.4.1
 - Corrección probable del build "lite": reglas de R8 (proguard-rules.pro) para ML Kit (OCR) y para
   las notificaciones; sin ellas, el build release de ML Kit suele fallar con "Missing class".
