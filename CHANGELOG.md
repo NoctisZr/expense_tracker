@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.4.1
+- Corrección probable del build "lite": reglas de R8 (proguard-rules.pro) para ML Kit (OCR) y para
+  las notificaciones; sin ellas, el build release de ML Kit suele fallar con "Missing class".
+- tool/ci_build.sh: intentos más finos (completa → sin huella → sin OCR → sin notificaciones → lite)
+  y un resumen del motivo de cada fallo en la pestaña "Summary" de la ejecución de GitHub Actions.
+
 ## 1.4.0
 Rendimiento (arranque):
 - La pantalla de carga aparece al instante; la base de datos se abre después, con las 4 cajas en paralelo.

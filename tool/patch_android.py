@@ -158,7 +158,60 @@ def patch_gradle():
         log("no se encontró build.gradle(.kts) de la app")
 
 
+# ----------------------------------------------------------------- proguard
+PROGUARD_RULES = """# --- Reglas añadidas por tool/patch_android.py ---
+# ML Kit: el plugin de OCR referencia reconocedores de otros alfabetos
+# (chino, japonés, coreano, devanagari) que no se incluyen. Sin estas líneas,
+# R8 falla en el build release con "Missing class com.google.mlkit.vision.text...".
+-dontwarn com.google.mlkit.vision.text.chinese.**
+-dontwarn com.google.mlkit.vision.text.devanagari.**
+-dontwarn com.google.mlkit.vision.text.japanese.**
+-dontwarn com.google.mlkit.vision.text.korean.**
+
+# flutter_local_notifications usa Gson con reflexión: sin esto, R8 puede romper
+# las notificaciones programadas en release.
+-keep class com.google.gson.reflect.TypeToken
+-keep class * extends com.google.gson.reflect.TypeToken
+-keep public class * implements java.lang.reflect.Type
+-keep class com.dexterous.flutterlocalnotifications.** { *; }
+"""
+
+
+def patch_proguard():
+    path = os.path.join(android, "app/proguard-rules.pro")
+    if os.path.exists(path):
+        text = read(path)
+        if "Reglas añadidas por tool/patch_android.py" not in text:
+            write(path, text.rstrip("\n") + "\n\n" + PROGUARD_RULES)
+    else:
+        write(path, PROGUARD_RULES)
+    log("reglas de R8 (ML Kit y notificaciones) escritas en proguard-rules.pro")
+
+    # Se asegura de que el build release use el archivo.
+    kts = os.path.join(android, "app/build.gradle.kts")
+    groovy = os.path.join(android, "app/build.gradle")
+    target = kts if os.path.exists(kts) else (groovy if os.path.exists(groovy) else None)
+    if target is None:
+        return
+    text = read(target)
+    if "proguard-rules.pro" in text:
+        return
+    start = text.find("buildTypes")
+    if start == -1:
+        log("no se encontró buildTypes; se confía en que el plugin de Flutter use proguard-rules.pro")
+        return
+    m = re.search(r"release\s*\{", text[start:])
+    if not m:
+        log("no se encontró el bloque release; se confía en el plugin de Flutter")
+        return
+    pos = start + m.end()
+    line = '\n            proguardFiles("proguard-rules.pro")' if target == kts else "\n            proguardFiles 'proguard-rules.pro'"
+    write(target, text[:pos] + line + text[pos:])
+    log("proguardFiles añadido al bloque release")
+
+
 patch_manifest()
 patch_main_activity()
 patch_launch_theme()
+patch_proguard()
 patch_gradle()
