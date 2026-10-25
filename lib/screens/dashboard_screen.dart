@@ -31,6 +31,7 @@ import '../widgets/section_card.dart';
 import '../widgets/vault_card.dart';
 import '../widgets/vault_details_sheet.dart';
 import '../widgets/subscription_suggestions.dart';
+import '../widgets/update_banner.dart';
 import '../widgets/upcoming_charges.dart';
 import '../widgets/vault_dialogs.dart';
 import '../widgets/workspace_selector.dart';
@@ -206,6 +207,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
             const SizedBox(height: 14),
             if (_view == 0) ...[
+            const UpdateBanner(),
             const BackupNudgeCard(),
             const NextPaymentCard(),
             const AccountsSection(),

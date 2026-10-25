@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.5.0
+- Botón **Reportar o sugerir** (Ajustes → Ayuda y novedades): el mensaje llega al desarrollador por
+  Telegram (a través de un Worker de Cloudflare; el token del bot no va dentro de la app). Incluye
+  vista previa de lo que se envía, datos técnicos opcionales, límites anti-spam y cola sin conexión.
+- **Releases automáticos en GitHub** tras cada build: etiqueta `vX.Y.Z-N`, notas tomadas de este
+  CHANGELOG, APK renombrados y marcado como "último release".
+- **Aviso de nueva versión dentro de la app** (una vez al día y a demanda): ver novedades, descargar,
+  más tarde u omitir esa versión.
+- Aviso opcional en un canal de Telegram con cada versión nueva.
+
 ## 1.4.2
 - APK más liviano: se compila un APK por arquitectura (`--split-per-abi`) y sin símbolos de
   depuración (`--split-debug-info`). El APK "gordo" repetía el motor de Flutter y ML Kit tres

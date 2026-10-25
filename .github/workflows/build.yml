@@ -31,6 +31,13 @@ jobs:
         run: |
           flutter create --platforms=android --org com.noctis.expensetracker --project-name expense_tracker /tmp/scaffold
 
+      - name: Generar la configuración de la app (versión, repositorio, reportes)
+        env:
+          REPO: ${{ github.repository }}
+          FEEDBACK_URL: ${{ vars.FEEDBACK_URL }}
+          FEEDBACK_APP_KEY: ${{ vars.FEEDBACK_APP_KEY }}
+        run: python3 tool/gen_app_config.py
+
       - name: Analizar el código (informativo, no bloquea el build)
         run: flutter analyze || true
 
@@ -78,21 +85,44 @@ jobs:
             fi
           fi
 
+      - name: Preparar el release (etiqueta, notas del CHANGELOG, APK renombrados)
+        id: meta
+        run: python3 tool/release_notes.py
+
       - name: Subir los APK como artifact de esta ejecución
         uses: actions/upload-artifact@v4
         with:
           name: expense-tracker-apk
-          path: |
-            build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
-            build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
+          path: dist/*.apk
           if-no-files-found: error
 
-      - name: Publicar los APK en un Release descargable
+      - name: Publicar el release en GitHub (descargable y marcado como el último)
+        id: release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: build-${{ github.run_number }}
-          name: "Expense Tracker — build #${{ github.run_number }} (${{ env.BUILD_MODE }})"
-          body: "Instala **app-arm64-v8a-release.apk** (casi todos los teléfonos). El de armeabi-v7a es solo para teléfonos muy antiguos de 32 bits."
-          files: |
-            build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
-            build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: ${{ steps.meta.outputs.name }}
+          body_path: release_notes.md
+          files: dist/*.apk
+          draft: false
+          prerelease: false
+          make_latest: true
+
+      - name: Avisar en Telegram (canal de novedades, si está configurado)
+        env:
+          TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TG_CHANNEL: ${{ secrets.TELEGRAM_CHANNEL_ID }}
+          RELEASE_URL: ${{ steps.release.outputs.url }}
+          VERSION: ${{ steps.meta.outputs.version }}
+          BUILD: ${{ steps.meta.outputs.build }}
+        run: |
+          if [ -z "${TG_TOKEN:-}" ] || [ -z "${TG_CHANNEL:-}" ]; then
+            echo "Sin secretos de Telegram: no se envía el aviso."
+            exit 0
+          fi
+          NOTES=$(sed -n '3,/^---$/p' release_notes.md | grep -v '^---$' | head -c 700)
+          TEXT=$(printf '🆕 Expense Tracker %s (build %s)\n\n%s\n\n⬇️ Descargar: %s' "$VERSION" "$BUILD" "$NOTES" "$RELEASE_URL")
+          curl -s -o /dev/null -w "Telegram HTTP %{http_code}\n" -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
+            --data-urlencode "chat_id=${TG_CHANNEL}" \
+            --data-urlencode "text=${TEXT}" \
+            --data-urlencode "disable_web_page_preview=true" || true

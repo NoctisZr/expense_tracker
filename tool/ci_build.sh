@@ -46,9 +46,10 @@ strip_biometrics() {
   cp tool/lite/biometric_service.dart lib/services/biometric_service.dart
 }
 strip_notifications() {
-  sed -i '/flutter_local_notifications/d;/^  timezone:/d;/quick_actions:/d' pubspec.yaml
+  sed -i '/flutter_local_notifications/d;/^  timezone:/d;/quick_actions:/d;/url_launcher:/d' pubspec.yaml
   cp tool/lite/notification_service.dart lib/services/notification_service.dart
   cp tool/lite/quick_actions_service.dart lib/services/quick_actions_service.dart
+  cp tool/lite/url_service.dart lib/services/url_service.dart
 }
 reset_sources() { git checkout -- pubspec.yaml lib/services; }
 

@@ -4,10 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/rate_alert.dart';
 import '../providers/currency_provider.dart';
+import '../providers/update_provider.dart';
 import '../providers/finance_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/theme_provider.dart';
 import '../services/backup_service.dart';
+import '../services/feedback_service.dart';
 import '../services/notification_scheduler.dart';
 import '../services/notification_service.dart';
 import '../services/quick_actions_service.dart';
@@ -98,6 +100,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         if (mounted) _scheduleNotifications();
       });
 
+      Future.delayed(const Duration(seconds: 6), () {
+        if (mounted) context.read<UpdateProvider>().checkIfDue();
+      });
+      Future.delayed(const Duration(seconds: 20), () {
+        if (mounted) FeedbackService(context.read<FinanceProvider>().settingsBox).flushPending();
+      });
       Future.delayed(const Duration(seconds: 12), () {
         if (mounted) _runAutoBackupIfDue();
       });

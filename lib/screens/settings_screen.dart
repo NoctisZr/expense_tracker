@@ -21,6 +21,7 @@ import '../utils/csv_utils.dart';
 import '../utils/xlsx_reader.dart';
 import '../utils/currency_list.dart';
 import '../widgets/category_dialogs.dart';
+import '../widgets/help_card.dart';
 import '../widgets/mod_gallery.dart';
 import '../widgets/notifications_card.dart';
 import '../widgets/pin_widgets.dart';
@@ -382,6 +383,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ],
               ),
             ),
+            const SizedBox(height: 16),
+            const HelpCard(),
             const SizedBox(height: 16),
             const NotificationsCard(),
             const SizedBox(height: 16),

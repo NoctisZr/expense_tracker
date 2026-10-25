@@ -285,3 +285,9 @@ pantalla de inicio (se reemplazó por atajos del icono), escaneo de códigos QR 
 El release incluye dos APK: **`app-arm64-v8a-release.apk`** (casi todos los teléfonos desde ~2016)
 y `app-armeabi-v7a-release.apk` (solo teléfonos muy antiguos de 32 bits). Cada uno pesa
 aproximadamente un tercio del APK único anterior.
+
+
+## Novedades de la v1.5
+
+- **Reportar o sugerir** (Ajustes → Ayuda y novedades): llega a tu Telegram. Guía: `docs/TELEGRAM_FEEDBACK.md`.
+- **Releases automáticos** en GitHub y **aviso de nueva versión** en la app. Guía: `docs/RELEASES_Y_ACTUALIZACIONES.md`.

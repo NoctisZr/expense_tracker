@@ -11,6 +11,7 @@ import 'providers/finance_provider.dart';
 import 'providers/locale_provider.dart';
 import 'providers/security_provider.dart';
 import 'providers/theme_provider.dart';
+import 'providers/update_provider.dart';
 import 'screens/home_screen.dart';
 import 'utils/app_theme.dart';
 import 'widgets/pin_widgets.dart';
@@ -143,6 +144,7 @@ class ExpenseTrackerApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => ThemeProvider(settingsBox)),
         ChangeNotifierProvider(create: (_) => LocaleProvider(settingsBox)),
         ChangeNotifierProvider(create: (_) => CurrencyProvider(settingsBox)),
+        ChangeNotifierProvider(create: (_) => UpdateProvider(settingsBox)),
         // lazy: false para que el bloqueo por PIN exista desde el primer frame.
         ChangeNotifierProvider(create: (_) => SecurityProvider(settingsBox), lazy: false),
         ChangeNotifierProvider<FinanceProvider>.value(value: financeProvider),
