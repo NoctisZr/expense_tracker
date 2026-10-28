@@ -18,12 +18,28 @@ if not match:
 version, build = match.group(1), int(match.group(2))
 
 
+def read_app_name():
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "app_name.txt")
+    try:
+        with open(path, encoding="utf-8") as f:
+            name = f.read().strip()
+    except OSError:
+        name = ""
+    return name or "Peculio"
+
+
+app_name = read_app_name()
+
+
 def q(value):
     return "'" + (value or "").strip().replace("\\", "\\\\").replace("'", "\\'").replace("$", "\\$") + "'"
 
 
 content = f"""// GENERADO por tool/gen_app_config.py (en CI se regenera en cada build).
 // Los valores de repositorio y reportes salen de variables de GitHub Actions.
+
+/// Nombre de la app (viene de tool/app_name.txt: el único sitio donde se cambia).
+const String kAppName = {q(app_name)};
 
 /// Versión de la app (viene de pubspec.yaml).
 const String kAppVersion = {q(version)};
@@ -43,4 +59,4 @@ const String kFeedbackAppKey = {q(os.environ.get('FEEDBACK_APP_KEY', ''))};
 """
 with open("lib/app_config.dart", "w", encoding="utf-8") as f:
     f.write(content)
-print(f"[gen_app_config] versión {version} build {build}, repo='{os.environ.get('REPO', '')}'")
+print(f"[gen_app_config] {app_name} {version} build {build}, repo='{os.environ.get('REPO', '')}'")

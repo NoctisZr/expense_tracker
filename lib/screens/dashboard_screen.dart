@@ -20,6 +20,7 @@ import '../widgets/balance_donut_chart.dart';
 import '../widgets/budget_section.dart';
 import '../widgets/category_selector_row.dart';
 import '../widgets/category_summary.dart';
+import '../widgets/credits_section.dart';
 import '../widgets/currency_dropdown.dart';
 import '../widgets/expense_calendar.dart';
 import '../widgets/expense_list_item.dart';
@@ -501,6 +502,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
               const RecurringIncomeSection(),
               const SizedBox(height: 18),
               const RecurringSection(),
+              const SizedBox(height: 18),
+              const CreditsSection(),
               const SizedBox(height: 18),
               const DebtsSection(),
             ],

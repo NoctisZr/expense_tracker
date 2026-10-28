@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.6.0
+- **Nuevo nombre: Peculio** (antes «Expense Tracker»). Cambia el nombre que se ve bajo el icono y
+  dentro de la app; el identificador interno no cambia, así que se instala encima de tus datos.
+- **Créditos y cuotas** (Planificación → Créditos y cuotas): registra compras a crédito en cuotas con
+  tasa mensual, TEA o TNA, comisión inicial, seguro o cargos por cuota y meses de gracia. Cada cuota
+  se registra sola como gasto en su fecha de vencimiento (la comisión inicial se suma a la primera).
+- **Calculadora de intereses**: cuota, total a pagar, intereses, costo efectivo anual (TCEA), tabla de
+  amortización, comparador de plazos (3/6/12/18/24/36), contado vs cuotas y simulación de pago adelantado.
+- **Intereses ajustables**: cambia la tasa o el plazo y solo se recalculan las cuotas futuras; anota lo
+  que el banco realmente cobró en cada cuota y ve la diferencia con el cálculo.
+- Cuentas: nuevo tipo **Tarjeta de crédito** con límite y disponible.
+- Respaldos: formato 6 (incluye los créditos). Los respaldos antiguos se siguen importando.
+- Cada build publica **dos APK por separado** (arm64-v8a y armeabi-v7a) y usa acciones de GitHub
+  actualizadas a Node 24.
+
+## 1.5.1
+- Subida de versión manual (sin cambios de código).
 ## 1.5.0
 - Botón **Reportar o sugerir** (Ajustes → Ayuda y novedades): el mensaje llega al desarrollador por
   Telegram (a través de un Worker de Cloudflare; el token del bot no va dentro de la app). Incluye

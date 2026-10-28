@@ -70,7 +70,7 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
   }
 
   Future<void> _shareInstead(LocaleProvider locale) async {
-    await Share.share(_previewText(locale), subject: 'Expense Tracker $kAppVersion');
+    await Share.share(_previewText(locale), subject: '$kAppName $kAppVersion');
   }
 
   Future<void> _send() async {

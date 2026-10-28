@@ -4,7 +4,7 @@
 Tras compilar, el workflow publica un **release de GitHub** (descargable, marcado como "Latest"):
 - Etiqueta `vX.Y.Z-N` (versión y número de build tomados de `pubspec.yaml`).
 - Notas tomadas de la sección `## X.Y.Z` de `CHANGELOG.md`.
-- Archivos `ExpenseTracker-X.Y.Z-arm64-v8a.apk` (el que casi todos instalan) y `…-armeabi-v7a.apk`.
+- Archivos `Peculio-X.Y.Z-arm64-v8a.apk` (el que casi todos instalan) y `…-armeabi-v7a.apk`.
 
 ## Cómo sacar una versión nueva (importante)
 1. En `pubspec.yaml` sube el número, p. ej. `version: 1.5.1+11`. **El número después del "+" debe aumentar**:

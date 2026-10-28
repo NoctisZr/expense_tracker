@@ -12,6 +12,8 @@ IconData accountIcon(String type) {
   switch (type) {
     case Account.card:
       return Icons.credit_card_rounded;
+    case Account.credit:
+      return Icons.credit_score_rounded;
     case Account.bank:
       return Icons.account_balance_rounded;
     case Account.savings:
@@ -26,6 +28,8 @@ String accountTypeLabel(LocaleProvider locale, String type) {
   switch (type) {
     case Account.card:
       return locale.t('cuenta_tarjeta');
+    case Account.credit:
+      return locale.t('cuenta_credito');
     case Account.bank:
       return locale.t('cuenta_banco');
     case Account.savings:
@@ -138,7 +142,15 @@ class AccountsSection extends StatelessWidget {
                           children: [
                             Text(a.name, maxLines: 1, overflow: TextOverflow.ellipsis,
                                 style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600)),
-                            Text(accountTypeLabel(locale, a.type), style: theme.textTheme.bodySmall),
+                            Text(
+                              a.type == Account.credit && a.creditLimit != null
+                                  ? '${accountTypeLabel(locale, a.type)} · ${locale.t('disponible_credito')}: '
+                                      '${formatCurrency(a.creditLimit! + finance.accountBalance(a, currency), a.currency)}'
+                                  : accountTypeLabel(locale, a.type),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.bodySmall,
+                            ),
                           ],
                         ),
                       ),
@@ -178,6 +190,7 @@ class _AccountDialog extends StatefulWidget {
 class _AccountDialogState extends State<_AccountDialog> {
   late final TextEditingController _nameController;
   late final TextEditingController _balanceController;
+  late final TextEditingController _limitController;
   late String _type;
   late String _currency;
 
@@ -187,6 +200,8 @@ class _AccountDialogState extends State<_AccountDialog> {
     final Account? a = widget.existing;
     _nameController = TextEditingController(text: a?.name ?? '');
     _balanceController = TextEditingController(text: a == null ? '' : a.initialBalance.toStringAsFixed(2));
+    _limitController = TextEditingController(
+        text: a?.creditLimit == null ? '' : a!.creditLimit!.toStringAsFixed(2));
     _type = a?.type ?? Account.cash;
     _currency = a?.currency ?? context.read<FinanceProvider>().localCurrency;
   }
@@ -195,6 +210,7 @@ class _AccountDialogState extends State<_AccountDialog> {
   void dispose() {
     _nameController.dispose();
     _balanceController.dispose();
+    _limitController.dispose();
     super.dispose();
   }
 
@@ -206,11 +222,14 @@ class _AccountDialogState extends State<_AccountDialog> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(locale.t('campos_gasto_invalidos'))));
       return;
     }
+    final double? limit = double.tryParse(_limitController.text.trim().replaceAll(',', '.'));
     final finance = context.read<FinanceProvider>();
     if (widget.existing == null) {
-      finance.addAccount(name: name, type: _type, currency: _currency, initialBalance: balance);
+      finance.addAccount(
+          name: name, type: _type, currency: _currency, initialBalance: balance, creditLimit: limit);
     } else {
-      finance.updateAccount(id: widget.existing!.id, name: name, type: _type, initialBalance: balance);
+      finance.updateAccount(
+          id: widget.existing!.id, name: name, type: _type, initialBalance: balance, creditLimit: limit);
     }
     Navigator.of(context).pop();
   }
@@ -288,6 +307,18 @@ class _AccountDialogState extends State<_AccountDialog> {
                   Text(_currency, style: const TextStyle(fontWeight: FontWeight.bold)),
               ],
             ),
+            if (_type == Account.credit) ...[
+              const SizedBox(height: 8),
+              TextField(
+                controller: _limitController,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: InputDecoration(
+                  labelText: locale.t('limite_credito'),
+                  helperText: locale.t('limite_credito_ayuda'),
+                  helperMaxLines: 2,
+                ),
+              ),
+            ],
           ],
         ),
       ),

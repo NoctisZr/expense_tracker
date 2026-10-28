@@ -2,6 +2,7 @@ import 'dart:ui' show PlatformDispatcher;
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:provider/provider.dart';
+import 'app_config.dart';
 import 'models/expense.dart';
 import 'models/income.dart';
 import 'models/vault.dart';
@@ -110,7 +111,7 @@ class _SplashApp extends StatelessWidget {
               const Icon(Icons.account_balance_wallet_rounded, size: 56, color: accent),
               const SizedBox(height: 14),
               Text(
-                'Expense Tracker',
+                kAppName,
                 style: TextStyle(color: foreground, fontSize: 20, fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 22),
@@ -152,7 +153,7 @@ class ExpenseTrackerApp extends StatelessWidget {
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, _) {
           return MaterialApp(
-            title: 'Expense Tracker',
+            title: kAppName,
             debugShowCheckedModeBanner: false,
             theme: buildAppTheme(isDark: false, accent: themeProvider.accentColor, mod: themeProvider.activeMod),
             darkTheme: buildAppTheme(isDark: true, accent: themeProvider.accentColor, mod: themeProvider.activeMod),

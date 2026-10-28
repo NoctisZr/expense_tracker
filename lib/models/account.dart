@@ -7,7 +7,11 @@ class Account {
   static const String card = 'card';
   static const String bank = 'bank';
   static const String savings = 'savings';
-  static const List<String> types = [cash, card, bank, savings];
+
+  /// Tarjeta de crédito (v1.6): el saldo negativo es lo que debes y
+  /// [creditLimit] permite mostrar cuánto te queda disponible.
+  static const String credit = 'credit';
+  static const List<String> types = [cash, card, bank, savings, credit];
 
   final String id;
   final String name;
@@ -15,20 +19,32 @@ class Account {
   final String currency;
   final double initialBalance;
 
+  /// Límite de la tarjeta de crédito (solo para el tipo `credit`).
+  final double? creditLimit;
+
   const Account({
     required this.id,
     required this.name,
     required this.type,
     required this.currency,
     required this.initialBalance,
+    this.creditLimit,
   });
 
-  Account copyWith({String? name, String? type, double? initialBalance}) => Account(
+  Account copyWith({
+    String? name,
+    String? type,
+    double? initialBalance,
+    double? creditLimit,
+    bool clearCreditLimit = false,
+  }) =>
+      Account(
         id: id,
         name: name ?? this.name,
         type: type ?? this.type,
         currency: currency,
         initialBalance: initialBalance ?? this.initialBalance,
+        creditLimit: clearCreditLimit ? null : (creditLimit ?? this.creditLimit),
       );
 
   Map<String, dynamic> toMap() => {
@@ -37,6 +53,7 @@ class Account {
         'type': type,
         'currency': currency,
         'initialBalance': initialBalance,
+        if (creditLimit != null) 'creditLimit': creditLimit,
       };
 
   factory Account.fromMap(Map<dynamic, dynamic> map) {
@@ -47,6 +64,7 @@ class Account {
       type: types.contains(type) ? type : cash,
       currency: map['currency'].toString(),
       initialBalance: (map['initialBalance'] as num?)?.toDouble() ?? 0,
+      creditLimit: (map['creditLimit'] as num?)?.toDouble(),
     );
   }
 }

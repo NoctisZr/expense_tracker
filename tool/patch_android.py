@@ -33,6 +33,16 @@ def log(msg):
     print(f"[patch_android] {msg}")
 
 
+def app_name():
+    """Nombre visible de la app (tool/app_name.txt)."""
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "app_name.txt")
+    try:
+        name = read(path).strip()
+    except OSError:
+        name = ""
+    return name or "Peculio"
+
+
 # ---------------------------------------------------------------- manifest
 def patch_manifest():
     path = os.path.join(android, "app/src/main/AndroidManifest.xml")
@@ -40,6 +50,11 @@ def patch_manifest():
         log("AndroidManifest.xml no encontrado")
         return
     text = read(path)
+
+    # Nombre que se ve bajo el icono y en la lista de apps.
+    label = app_name().replace("&", "&amp;").replace("<", "&lt;").replace('"', "&quot;")
+    text, n_label = re.subn(r'android:label="[^"]*"', lambda m: f'android:label="{label}"', text, count=1)
+    log(f"nombre de la app: {label}" if n_label else "no se encontró android:label en el manifiesto")
 
     permissions = ["android.permission.INTERNET", "android.permission.USE_BIOMETRIC"]
     if with_notifications:

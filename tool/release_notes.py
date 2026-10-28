@@ -7,6 +7,20 @@ import shutil
 
 APK_DIR = "build/app/outputs/flutter-apk"
 
+
+def read_app_name():
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "app_name.txt")
+    try:
+        with open(path, encoding="utf-8") as f:
+            name = f.read().strip()
+    except OSError:
+        name = ""
+    return name or "Peculio"
+
+
+APP = read_app_name()
+SLUG = re.sub(r"[^A-Za-z0-9]+", "", APP) or "App"
+
 with open("pubspec.yaml", encoding="utf-8") as f:
     m = re.search(r"^version:\s*(\d+\.\d+\.\d+)\+(\d+)", f.read(), re.M)
 version, build = m.group(1), m.group(2)
@@ -23,13 +37,13 @@ if os.path.exists("CHANGELOG.md"):
 if not notes:
     notes = "Mejoras y correcciones."
 
-body = f"""## Expense Tracker {version} (build {build})
+body = f"""## {APP} {version} (build {build})
 
 {notes}
 
 ---
 ### Cómo instalar
-- Descarga **`ExpenseTracker-{version}-arm64-v8a.apk`** (casi todos los teléfonos desde ~2016) e instálalo.
+- Descarga **`{SLUG}-{version}-arm64-v8a.apk`** (casi todos los teléfonos desde ~2016) e instálalo.
 - `…-armeabi-v7a.apk` es solo para teléfonos muy antiguos de 32 bits.
 - Si ya tienes la app, instálalo encima: tus datos se conservan (siempre que el APK esté firmado con la misma clave).
 
@@ -43,12 +57,12 @@ copied = []
 for abi in ("arm64-v8a", "armeabi-v7a"):
     src = os.path.join(APK_DIR, f"app-{abi}-release.apk")
     if os.path.exists(src):
-        dst = os.path.join("dist", f"ExpenseTracker-{version}-{abi}.apk")
+        dst = os.path.join("dist", f"{SLUG}-{version}-{abi}.apk")
         shutil.copyfile(src, dst)
         copied.append(dst)
 
 out = os.environ.get("GITHUB_OUTPUT")
 if out:
     with open(out, "a", encoding="utf-8") as f:
-        f.write(f"tag={tag}\nversion={version}\nbuild={build}\nname=Expense Tracker {version} (build {build})\n")
+        f.write(f"tag={tag}\nversion={version}\nbuild={build}\napp={APP}\nslug={SLUG}\nname={APP} {version} (build {build})\n")
 print(f"[release_notes] tag={tag} apks={copied}")

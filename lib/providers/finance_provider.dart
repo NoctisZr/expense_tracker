@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:hive/hive.dart';
 import '../models/expense.dart';
 import '../models/account.dart';
+import '../models/credit_purchase.dart';
 import '../models/debt.dart';
 import '../models/income.dart';
 import '../models/recurring_expense.dart';
@@ -11,6 +12,7 @@ import '../models/recurring_income.dart';
 import '../models/vault.dart';
 import '../models/vault_transaction.dart';
 import '../providers/currency_provider.dart';
+import '../utils/amortization.dart';
 import '../utils/category_registry.dart';
 import '../models/workspace.dart';
 import '../utils/currency_list.dart';
@@ -65,6 +67,7 @@ class FinanceProvider extends ChangeNotifier {
   static const String _trashKeyPrefix = 'trash_';
   static const String _recurringIncomeKeyPrefix = 'recurringIncome_';
   static const String _debtsKeyPrefix = 'debts_';
+  static const String _creditsKeyPrefix = 'credits_';
   static const String _accountsKeyPrefix = 'accounts_';
   static const String _transfersKeyPrefix = 'transfers_';
   static const String _lastAccountKeyPrefix = 'lastAccount_';
@@ -262,6 +265,7 @@ class FinanceProvider extends ChangeNotifier {
     await settingsBox.delete('$_debtsKeyPrefix$id');
     await settingsBox.delete('$_accountsKeyPrefix$id');
     await settingsBox.delete('$_transfersKeyPrefix$id');
+    await settingsBox.delete('$_creditsKeyPrefix$id');
     await settingsBox.delete('$_lastAccountKeyPrefix$id');
     await settingsBox.delete('${_localCurrencyKey}_$id');
     _workspaces = _workspaces.where((w) => w.id != id).toList();
@@ -861,7 +865,7 @@ class FinanceProvider extends ChangeNotifier {
   /// activo. Devuelve cuántos gastos se generaron. No notifica: lo hace el
   /// que llama.
   int applyRecurringExpenses() {
-    return _applyRecurringExpensesOnly() + _applyRecurringIncomes();
+    return _applyRecurringExpensesOnly() + _applyRecurringIncomes() + _applyCredits();
   }
 
   int _applyRecurringExpensesOnly() {
@@ -1214,6 +1218,7 @@ class FinanceProvider extends ChangeNotifier {
     required String type,
     required String currency,
     required double initialBalance,
+    double? creditLimit,
   }) {
     final List<Account> list = accounts
       ..add(Account(
@@ -1222,6 +1227,7 @@ class FinanceProvider extends ChangeNotifier {
         type: type,
         currency: currency,
         initialBalance: initialBalance,
+        creditLimit: type == Account.credit ? creditLimit : null,
       ));
     _saveAccounts(list);
     notifyListeners();
@@ -1232,9 +1238,18 @@ class FinanceProvider extends ChangeNotifier {
     required String name,
     required String type,
     required double initialBalance,
+    double? creditLimit,
   }) {
     _saveAccounts(accounts
-        .map((a) => a.id == id ? a.copyWith(name: name.trim(), type: type, initialBalance: initialBalance) : a)
+        .map((a) => a.id == id
+            ? a.copyWith(
+                name: name.trim(),
+                type: type,
+                initialBalance: initialBalance,
+                creditLimit: type == Account.credit ? creditLimit : null,
+                clearCreditLimit: type != Account.credit || creditLimit == null,
+              )
+            : a)
         .toList());
     notifyListeners();
   }
@@ -1575,6 +1590,175 @@ class FinanceProvider extends ChangeNotifier {
   }
 
   // ---------------------------------------------------------------------
+  // Créditos y cuotas (v1.6)
+  // ---------------------------------------------------------------------
+
+  String get _creditsKey => '$_creditsKeyPrefix$_workspaceId';
+
+  List<CreditPurchase> get credits {
+    final dynamic raw = settingsBox.get(_creditsKey);
+    final List<CreditPurchase> result = [];
+    if (raw is List) {
+      for (final item in raw) {
+        if (item is Map) {
+          try {
+            result.add(CreditPurchase.fromMap(item));
+          } catch (_) {}
+        }
+      }
+    }
+    return result;
+  }
+
+  Future<void> _saveCredits(List<CreditPurchase> list) async {
+    await settingsBox.put(_creditsKey, list.map((c) => c.toMap()).toList());
+  }
+
+  CreditPurchase? creditById(String id) {
+    for (final c in credits) {
+      if (c.id == id) return c;
+    }
+    return null;
+  }
+
+  /// Crea la compra a crédito y registra de una vez las cuotas que ya vencieron.
+  void addCredit(CreditPurchase credit) {
+    _saveCredits([...credits, credit]);
+    _applyCredits();
+    notifyListeners();
+  }
+
+  /// Sustituye una compra a crédito (editar nombre, renegociar, ajustar montos).
+  void replaceCredit(CreditPurchase updated) {
+    _saveCredits(credits.map((c) => c.id == updated.id ? updated : c).toList());
+    notifyListeners();
+  }
+
+  /// Borra el plan de cuotas. Los gastos ya registrados NO se borran.
+  void deleteCredit(String id) {
+    _saveCredits(credits.where((c) => c.id != id).toList());
+    notifyListeners();
+  }
+
+  /// Gasto de la cuota [n] de la compra [c], con la fecha de vencimiento.
+  Expense _installmentExpense(CreditPurchase c, int n, DateTime date) {
+    final int total = c.totalInstallments;
+    return Expense(
+      id: generateId(),
+      name: '${c.name} ($n/$total)',
+      amount: c.amountFor(n),
+      currency: c.currency,
+      category: c.category,
+      date: date,
+      accountId: c.accountId,
+      creditId: c.id,
+      installmentNumber: n,
+    );
+  }
+
+  /// Registra YA la próxima cuota pendiente (pago anticipado de esa cuota).
+  void registerNextInstallment(String creditId) {
+    final List<CreditPurchase> list = credits;
+    final int index = list.indexWhere((c) => c.id == creditId);
+    if (index < 0) return;
+    final CreditPurchase c = list[index];
+    final Installment? next = c.nextInstallment;
+    if (next == null) return;
+    final Expense expense = _installmentExpense(c, next.number, DateTime.now());
+    expensesBox.put(expense.id, expense);
+    list[index] = c.copyWith(registeredCount: c.registeredCount + 1);
+    _saveCredits(list);
+    notifyListeners();
+  }
+
+  /// Anota el monto que el banco cobró de verdad en la cuota [n] (o quita el
+  /// ajuste si [amount] es null). Si la cuota ya tiene gasto, lo corrige.
+  void setInstallmentAmount(String creditId, int n, double? amount) {
+    final List<CreditPurchase> list = credits;
+    final int index = list.indexWhere((c) => c.id == creditId);
+    if (index < 0) return;
+    final CreditPurchase c = list[index];
+    final Map<int, double> overrides = Map<int, double>.of(c.overrides);
+    if (amount == null) {
+      overrides.remove(n);
+    } else {
+      overrides[n] = amount;
+    }
+    final CreditPurchase updated = c.copyWith(overrides: overrides);
+    list[index] = updated;
+    _saveCredits(list);
+    for (final e in expensesBox.values.toList()) {
+      if (e.creditId == creditId && e.installmentNumber == n) {
+        e.amount = updated.amountFor(n);
+        e.localAmount = null;
+        e.localCurrencyAtCreation = null;
+        expensesBox.put(e.id, e);
+      }
+    }
+    notifyListeners();
+  }
+
+  /// Crea los gastos de las cuotas cuya fecha ya llegó (en orden). Devuelve
+  /// cuántos gastos generó. No notifica: lo hace quien llama.
+  int _applyCredits() {
+    final List<CreditPurchase> list = credits;
+    if (list.isEmpty) return 0;
+    final DateTime now = DateTime.now();
+    int created = 0;
+    bool changed = false;
+    final List<CreditPurchase> updated = [];
+    for (final c in list) {
+      final List<Installment> schedule = c.schedule;
+      int registered = c.registeredCount;
+      // Tope de seguridad: máximo 60 cuotas atrasadas de una vez.
+      int guard = 0;
+      while (registered < schedule.length && guard < 60) {
+        final Installment next = schedule[registered];
+        if (next.dueDate.isAfter(now)) break;
+        final Expense expense = _installmentExpense(c, next.number, next.dueDate);
+        expensesBox.put(expense.id, expense);
+        registered++;
+        created++;
+        guard++;
+      }
+      if (registered != c.registeredCount) {
+        changed = true;
+        updated.add(c.copyWith(registeredCount: registered));
+      } else {
+        updated.add(c);
+      }
+    }
+    if (changed) _saveCredits(updated);
+    return created;
+  }
+
+  /// Capital pendiente de todas las compras a crédito, en moneda local.
+  double creditOutstandingLocal(CurrencyProvider currency) {
+    double total = 0;
+    for (final c in credits) {
+      total += currency.convert(c.outstanding, c.currency, _localCurrency);
+    }
+    return total;
+  }
+
+  /// Total de cuotas que vencen entre [start] y [end] (sin registrar aún),
+  /// en moneda local.
+  double creditInstallmentsDueLocal(CurrencyProvider currency, DateTime start, DateTime end) {
+    double total = 0;
+    for (final c in credits) {
+      final List<Installment> schedule = c.schedule;
+      for (int n = c.registeredCount + 1; n <= schedule.length; n++) {
+        final DateTime due = schedule[n - 1].dueDate;
+        if (due.isBefore(start)) continue;
+        if (due.isAfter(end)) break;
+        total += currency.convert(c.amountFor(n), c.currency, _localCurrency);
+      }
+    }
+    return total;
+  }
+
+
+  // ---------------------------------------------------------------------
   // Exportar / Importar
   // ---------------------------------------------------------------------
 
@@ -1582,7 +1766,7 @@ class FinanceProvider extends ChangeNotifier {
   Map<String, dynamic> exportData() {
     return {
       'exportedAt': DateTime.now().toIso8601String(),
-      'formatVersion': 5,
+      'formatVersion': 6,
       'workspaceName': activeWorkspace.name,
       'localCurrency': _localCurrency,
       'expenses': expensesBox.values.map((e) => e.toJson()).toList(),
@@ -1596,6 +1780,7 @@ class FinanceProvider extends ChangeNotifier {
       'debts': debts.map((d) => d.toMap()).toList(),
       'accounts': accounts.map((a) => a.toMap()).toList(),
       'transfers': transfers.map((t) => t.toMap()).toList(),
+      'credits': credits.map((c) => c.toMap()).toList(),
     };
   }
 
@@ -1760,6 +1945,20 @@ class FinanceProvider extends ChangeNotifier {
         }
       }
       await _saveTransfers(imported);
+    }
+
+    final dynamic creditsJson = data['credits'];
+    if (creditsJson is List) {
+      final List<CreditPurchase> imported = merge ? credits : [];
+      for (final item in creditsJson) {
+        if (item is Map) {
+          try {
+            final CreditPurchase c = CreditPurchase.fromMap(item);
+            if (!imported.any((x) => x.id == c.id)) imported.add(c);
+          } catch (_) {}
+        }
+      }
+      await _saveCredits(imported);
     }
 
     notifyListeners();

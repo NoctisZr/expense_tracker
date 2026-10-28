@@ -1,4 +1,4 @@
-# Expense Tracker
+# Peculio (antes «Expense Tracker»)
 
 App de finanzas personales para Android hecha con Flutter (Material 3):
 balance basado en tus ingresos reales, bóvedas de ahorro multi-divisa con

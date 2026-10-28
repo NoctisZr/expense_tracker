@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import '../app_config.dart';
 
 class BackupImportException implements Exception {
   final String message;
@@ -23,7 +24,7 @@ class BackupService {
 
     await Share.shareXFiles(
       [XFile(file.path, mimeType: 'application/json')],
-      subject: 'Expense Tracker - Respaldo de datos',
+      subject: '$kAppName - Respaldo de datos',
     );
   }
 
@@ -36,7 +37,7 @@ class BackupService {
 
     await Share.shareXFiles(
       [XFile(file.path, mimeType: 'text/csv')],
-      subject: 'Expense Tracker - Gastos (CSV)',
+      subject: '$kAppName - Gastos (CSV)',
     );
   }
 

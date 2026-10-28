@@ -46,6 +46,10 @@ class Expense {
   /// Etiquetas libres en minúscula (opcional, v1.4).
   List<String>? tags;
 
+  /// Compra a crédito de la que salió este gasto y número de cuota (v1.6).
+  String? creditId;
+  int? installmentNumber;
+
   Expense({
     required this.id,
     required this.name,
@@ -59,6 +63,8 @@ class Expense {
     this.receiptPath,
     this.accountId,
     this.tags,
+    this.creditId,
+    this.installmentNumber,
   });
 
   Map<String, dynamic> toJson() => {
@@ -74,6 +80,8 @@ class Expense {
         if (receiptPath != null) 'receiptPath': receiptPath,
         if (accountId != null) 'accountId': accountId,
         if (tags != null && tags!.isNotEmpty) 'tags': tags,
+        if (creditId != null) 'creditId': creditId,
+        if (installmentNumber != null) 'installmentNumber': installmentNumber,
       };
 
   factory Expense.fromJson(Map<String, dynamic> json) => Expense(
@@ -89,6 +97,8 @@ class Expense {
         receiptPath: json['receiptPath'] as String?,
         accountId: json['accountId'] as String?,
         tags: (json['tags'] as List?)?.map((e) => e.toString()).toList(),
+        creditId: json['creditId'] as String?,
+        installmentNumber: (json['installmentNumber'] as num?)?.toInt(),
       );
 }
 
@@ -122,13 +132,16 @@ class ExpenseAdapter extends TypeAdapter<Expense> {
       // Campos añadidos en la v1.4.
       accountId: fields[10] as String?,
       tags: (fields[11] as List?)?.map((e) => e.toString()).toList(),
+      // Campos añadidos en la v1.6 (créditos y cuotas).
+      creditId: fields[12] as String?,
+      installmentNumber: (fields[13] as num?)?.toInt(),
     );
   }
 
   @override
   void write(BinaryWriter writer, Expense obj) {
     writer
-      ..writeByte(12)
+      ..writeByte(14)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -152,6 +165,10 @@ class ExpenseAdapter extends TypeAdapter<Expense> {
       ..writeByte(10)
       ..write(obj.accountId)
       ..writeByte(11)
-      ..write(obj.tags);
+      ..write(obj.tags)
+      ..writeByte(12)
+      ..write(obj.creditId)
+      ..writeByte(13)
+      ..write(obj.installmentNumber);
   }
 }

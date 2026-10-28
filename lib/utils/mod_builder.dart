@@ -127,7 +127,7 @@ class ModDraft {
   Map<String, dynamic> toJson() => {
         'name': name.trim(),
         if (author.trim().isNotEmpty) 'author': author.trim(),
-        'description': 'Mod creado con el editor de Expense Tracker.',
+        'description': 'Mod creado con el editor de la app.',
         'preferredBrightness': dark ? 'dark' : 'light',
         'colors': {
           'background': colorToHex(background),
