@@ -3,3 +3,5 @@
 *.keystore
 *.b64
 key.properties
+
+__pycache__/
