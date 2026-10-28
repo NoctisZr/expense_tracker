@@ -30,6 +30,8 @@ class _InterestCalculatorScreenState extends State<InterestCalculatorScreen> {
   final TextEditingController _rate = TextEditingController();
   final TextEditingController _upfront = TextEditingController();
   final TextEditingController _fee = TextEditingController();
+  final TextEditingController _upfrontPct = TextEditingController();
+  final TextEditingController _feePct = TextEditingController();
   final TextEditingController _grace = TextEditingController();
   final TextEditingController _cash = TextEditingController();
   final TextEditingController _prepayAfter = TextEditingController(text: '1');
@@ -48,7 +50,7 @@ class _InterestCalculatorScreenState extends State<InterestCalculatorScreen> {
 
   @override
   void dispose() {
-    for (final c in [_amount, _count, _rate, _upfront, _fee, _grace, _cash, _prepayAfter, _prepayExtra]) {
+    for (final c in [_amount, _count, _rate, _upfront, _fee, _upfrontPct, _feePct, _grace, _cash, _prepayAfter, _prepayExtra]) {
       c.dispose();
     }
     super.dispose();
@@ -56,6 +58,9 @@ class _InterestCalculatorScreenState extends State<InterestCalculatorScreen> {
 
   double _num(TextEditingController c) => double.tryParse(c.text.trim().replaceAll(',', '.')) ?? 0;
   int _int(TextEditingController c) => int.tryParse(c.text.trim()) ?? 0;
+
+  /// Comisión inicial total: monto fijo + % del monto financiado.
+  double get _upfrontTotal => round2(_num(_upfront) + _num(_amount) * _num(_upfrontPct) / 100);
 
   DateTime get _defaultFirstDue {
     final DateTime now = DateTime.now();
@@ -75,6 +80,7 @@ class _InterestCalculatorScreenState extends State<InterestCalculatorScreen> {
       ratePercent: _rateType == RateType.none ? 0 : _num(_rate),
       method: _method,
       installmentFee: _num(_fee),
+      installmentFeePct: _num(_feePct),
       graceMonths: grace,
     );
   }
@@ -120,7 +126,7 @@ class _InterestCalculatorScreenState extends State<InterestCalculatorScreen> {
       currency: _currency,
       accountId: result.accountId,
       financed: real.principal,
-      upfrontFee: _num(_upfront),
+      upfrontFee: _upfrontTotal,
       terms: real,
     ));
     Navigator.of(context).pop();
@@ -131,7 +137,7 @@ class _InterestCalculatorScreenState extends State<InterestCalculatorScreen> {
     final locale = context.watch<LocaleProvider>();
     final theme = Theme.of(context);
     final LoanTerms? terms = _terms();
-    final double upfront = _num(_upfront);
+    final double upfront = _upfrontTotal;
     final List<Installment> schedule = terms == null ? const [] : buildSchedule(terms);
     final LoanSummary? summary = terms == null ? null : summarize(terms.principal, upfront, schedule);
 
@@ -254,6 +260,28 @@ class _InterestCalculatorScreenState extends State<InterestCalculatorScreen> {
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   onChanged: (_) => setState(() {}),
                   decoration: InputDecoration(labelText: locale.t('cargo_por_cuota')),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _upfrontPct,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  onChanged: (_) => setState(() {}),
+                  decoration: InputDecoration(labelText: locale.t('comision_inicial_pct')),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: TextField(
+                  controller: _feePct,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  onChanged: (_) => setState(() {}),
+                  decoration: InputDecoration(labelText: locale.t('seguro_pct_saldo')),
                 ),
               ),
             ],

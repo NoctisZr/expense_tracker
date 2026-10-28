@@ -218,3 +218,12 @@ ReceiptData parseReceiptText(
     rawText: text,
   );
 }
+
+// --- Utilidades reutilizables por otros intérpretes de texto (SMS bancarios...) ---
+
+DateTime? findDateInText(String text) => _findDate(text);
+
+String? findCurrencyInText(String text, String defaultCurrency, Set<String> supported) =>
+    _findCurrency(text, defaultCurrency, supported);
+
+String? guessCategoryFromText(String text, String? merchant) => _guessCategory(text, merchant);

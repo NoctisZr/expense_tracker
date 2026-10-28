@@ -11,6 +11,7 @@ import 'account_widgets.dart';
 import 'category_selector_row.dart';
 import 'currency_dropdown.dart';
 import 'receipt_flow.dart';
+import 'sms_flow.dart';
 import 'section_card.dart';
 
 class AddExpenseSection extends StatefulWidget {
@@ -176,6 +177,12 @@ class _AddExpenseSectionState extends State<AddExpenseSection> {
                 onPressed: () => startReceiptScan(context),
                 icon: const Icon(Icons.document_scanner_outlined, size: 18),
                 label: Text(locale.t('escanear_factura')),
+              ),
+              IconButton(
+                onPressed: () => startSmsImport(context),
+                icon: const Icon(Icons.sms_outlined, size: 20),
+                tooltip: locale.t('sms_boton'),
+                visualDensity: VisualDensity.compact,
               ),
             ],
           ),

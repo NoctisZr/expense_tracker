@@ -1808,6 +1808,24 @@ class FinanceProvider extends ChangeNotifier {
     return buffer.toString();
   }
 
+  /// Filas para exportar los gastos a Excel: encabezados + una fila por gasto.
+  List<List<Object?>> expensesSheetRows(List<String> headers) {
+    String two(int n) => n.toString().padLeft(2, '0');
+    final List<List<Object?>> rows = [headers];
+    for (final e in expenses) {
+      rows.add([
+        '${e.date.year}-${two(e.date.month)}-${two(e.date.day)}',
+        e.name,
+        e.category,
+        e.amount,
+        e.currency,
+        e.localAmount,
+        e.note ?? '',
+      ]);
+    }
+    return rows;
+  }
+
   /// Importa un respaldo. Con [merge] = false reemplaza TODO el contenido
   /// del espacio activo; con [merge] = true suma lo del archivo a lo que ya
   /// hay (los registros con el mismo id se actualizan, el resto se conserva).

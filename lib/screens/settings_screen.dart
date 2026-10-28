@@ -74,6 +74,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  Future<void> _handleExportXlsx() async {
+    final locale = context.read<LocaleProvider>();
+    final rows = context.read<FinanceProvider>().expensesSheetRows([
+      locale.t('xl_fecha'),
+      locale.t('xl_nombre'),
+      locale.t('xl_categoria'),
+      locale.t('xl_monto'),
+      locale.t('xl_moneda'),
+      locale.t('xl_monto_local'),
+      locale.t('xl_nota'),
+    ]);
+    try {
+      await _backupService.exportXlsxAndShare(rows, sheetName: locale.t('xl_hoja'));
+    } catch (_) {
+      _showSnack(locale.t('error_exportar'));
+    }
+  }
+
   Future<void> _handleImport() async {
     final locale = context.read<LocaleProvider>();
     final bool? merge = await askImportMode(context);
@@ -575,6 +593,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     onPressed: _handleExportCsv,
                     icon: const Icon(Icons.table_chart_outlined),
                     label: Text(locale.t('exportar_csv')),
+                  ),
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    onPressed: _handleExportXlsx,
+                    icon: const Icon(Icons.grid_on_rounded),
+                    label: Text(locale.t('exportar_excel')),
                   ),
                   const SizedBox(height: 16),
                   Text(locale.t('importar_descripcion'), style: theme.textTheme.bodySmall),

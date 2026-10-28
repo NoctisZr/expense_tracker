@@ -1,7 +1,7 @@
 name: expense_tracker
 description: "Expense Tracker: dashboard de finanzas personales con bóvedas de ahorro y conversor de divisas en tiempo real."
 publish_to: 'none'
-version: 1.6.0+12
+version: 1.7.0+13
 
 environment:
   sdk: '>=3.4.0 <4.0.0'

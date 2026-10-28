@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.7.0
+- **Gasto desde un SMS**: pega el mensaje de tu banco (botón del SMS junto a «Escanear factura») y
+  la app lee el importe, el comercio, la fecha, la moneda y si es gasto o ingreso; lo revisas y guardas.
+- **Exportar a Excel (.xlsx)** desde Ajustes, además del CSV. Se abre en Excel, Google Sheets y LibreOffice.
+- **Créditos**: comisión inicial y seguro también como porcentaje (el seguro como % mensual del saldo).
+- **Avisos de cuotas**: te avisa el día antes de que venza cada cuota de tus compras a crédito.
+
 ## 1.6.0
 - **Nuevo nombre: Peculio** (antes «Expense Tracker»). Cambia el nombre que se ve bajo el icono y
   dentro de la app; el identificador interno no cambia, así que se instala encima de tus datos.

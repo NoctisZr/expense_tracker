@@ -1,3 +1,4 @@
+import '../models/credit_purchase.dart';
 import '../models/recurring_expense.dart';
 import '../models/recurring_income.dart';
 import 'formatters.dart';
@@ -96,6 +97,7 @@ List<PlannedNotification> planNotifications({
   required List<RecurringIncome> incomes,
   required DateTime? lastExport,
   required String Function(String key) t,
+  List<CreditPurchase> credits = const [],
   int horizonDays = 35,
 }) {
   if (!prefs.enabled) return const [];
@@ -122,6 +124,23 @@ List<PlannedNotification> planNotifications({
         );
         due = RecurringExpense.advance(due, r.frequency, r.dayOfMonth);
         guard++;
+      }
+    }
+  }
+
+  if (prefs.charges) {
+    // Cuotas de compras a crédito: el día anterior al vencimiento, 9:00.
+    for (final c in credits) {
+      final schedule = c.schedule;
+      for (int n = c.registeredCount + 1; n <= schedule.length; n++) {
+        final DateTime due = schedule[n - 1].dueDate;
+        if (due.isAfter(limit)) break;
+        final DateTime day = DateTime(due.year, due.month, due.day);
+        add(
+          DateTime(day.year, day.month, day.day - 1, 9),
+          '${t('notif_cobro_manana')}: ${c.name} ($n/${schedule.length})',
+          '${formatAmount(c.amountFor(n))} ${c.currency}',
+        );
       }
     }
   }

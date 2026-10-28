@@ -86,8 +86,11 @@ class LoanTerms {
   final double ratePercent;
   final String method;
 
-  /// Seguro o cargos que se suman a CADA cuota.
+  /// Seguro o cargos que se suman a CADA cuota (monto fijo).
   final double installmentFee;
+
+  /// Seguro como % mensual del saldo pendiente (p. ej. desgravamen).
+  final double installmentFeePct;
 
   /// Meses iniciales en que solo se pagan intereses y cargos.
   final int graceMonths;
@@ -103,6 +106,7 @@ class LoanTerms {
     this.ratePercent = 0,
     this.method = LoanMethod.french,
     this.installmentFee = 0,
+    this.installmentFeePct = 0,
     this.graceMonths = 0,
   });
 
@@ -115,6 +119,7 @@ class LoanTerms {
     double? ratePercent,
     String? method,
     double? installmentFee,
+    double? installmentFeePct,
     int? graceMonths,
     DateTime? firstDue,
   }) =>
@@ -125,6 +130,7 @@ class LoanTerms {
         ratePercent: ratePercent ?? this.ratePercent,
         method: method ?? this.method,
         installmentFee: installmentFee ?? this.installmentFee,
+        installmentFeePct: installmentFeePct ?? this.installmentFeePct,
         graceMonths: graceMonths ?? this.graceMonths,
         firstDue: firstDue ?? this.firstDue,
       );
@@ -136,6 +142,7 @@ class LoanTerms {
         'ratePercent': ratePercent,
         'method': method,
         'installmentFee': installmentFee,
+        'installmentFeePct': installmentFeePct,
         'graceMonths': graceMonths,
         'firstDue': firstDue.toIso8601String(),
       };
@@ -150,6 +157,7 @@ class LoanTerms {
       ratePercent: (map['ratePercent'] as num?)?.toDouble() ?? 0,
       method: LoanMethod.all.contains(method) ? method : LoanMethod.french,
       installmentFee: (map['installmentFee'] as num?)?.toDouble() ?? 0,
+      installmentFeePct: (map['installmentFeePct'] as num?)?.toDouble() ?? 0,
       graceMonths: (map['graceMonths'] as num?)?.toInt() ?? 0,
       firstDue: DateTime.parse(map['firstDue'].toString()),
     );
@@ -216,7 +224,7 @@ List<Installment> buildSchedule(LoanTerms t, {int numberOffset = 0}) {
       dueDate: addMonthsClamped(t.firstDue, idx - 1),
       capital: 0,
       interest: round2(balance * i),
-      fees: t.installmentFee,
+      fees: round2(t.installmentFee + balance * t.installmentFeePct / 100),
       balanceAfter: balance,
     ));
   }
@@ -228,6 +236,7 @@ List<Installment> buildSchedule(LoanTerms t, {int numberOffset = 0}) {
     idx++;
     final double base = t.method == LoanMethod.flat ? principal : balance;
     final double interest = round2(base * i);
+    final double fees = round2(t.installmentFee + balance * t.installmentFeePct / 100);
     double capital;
     if (k == n) {
       capital = balance;
@@ -244,7 +253,7 @@ List<Installment> buildSchedule(LoanTerms t, {int numberOffset = 0}) {
       dueDate: addMonthsClamped(t.firstDue, idx - 1),
       capital: capital,
       interest: interest,
-      fees: t.installmentFee,
+      fees: fees,
       balanceAfter: balance,
     ));
   }
@@ -446,6 +455,7 @@ PrepayResult? simulatePrepayment(
     ratePercent: t.ratePercent,
     method: t.method,
     installmentFee: t.installmentFee,
+    installmentFeePct: t.installmentFeePct,
     graceMonths: 0,
   );
   final List<Installment> remaining = buildSchedule(next, numberOffset: k);

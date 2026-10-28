@@ -181,6 +181,7 @@ class CreditPurchase {
         ratePercent: ratePercent,
         method: method ?? terms.method,
         installmentFee: terms.installmentFee,
+        installmentFeePct: terms.installmentFeePct,
         graceMonths: 0,
       ),
       offset: k,

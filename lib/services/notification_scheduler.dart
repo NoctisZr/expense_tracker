@@ -24,6 +24,7 @@ Future<void> rescheduleNotifications({
       prefs: prefs,
       recurring: finance.recurringExpenses,
       incomes: finance.recurringIncomes,
+      credits: finance.credits,
       lastExport: lastExport,
       t: locale.t,
     );

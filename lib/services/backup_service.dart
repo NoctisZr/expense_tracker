@@ -4,6 +4,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../app_config.dart';
+import '../utils/xlsx_writer.dart';
 
 class BackupImportException implements Exception {
   final String message;
@@ -38,6 +39,25 @@ class BackupService {
     await Share.shareXFiles(
       [XFile(file.path, mimeType: 'text/csv')],
       subject: '$kAppName - Gastos (CSV)',
+    );
+  }
+
+  /// Exporta los gastos a un archivo Excel (.xlsx) y abre el menú de compartir.
+  Future<void> exportXlsxAndShare(List<List<Object?>> rows, {String sheetName = 'Gastos'}) async {
+    final Directory tempDir = await getTemporaryDirectory();
+    final String timestamp =
+        DateTime.now().toIso8601String().replaceAll(':', '-').split('.').first;
+    final File file = File('${tempDir.path}/${kAppName}_gastos_$timestamp.xlsx');
+    await file.writeAsBytes(buildXlsx(rows, sheetName: sheetName));
+
+    await Share.shareXFiles(
+      [
+        XFile(
+          file.path,
+          mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ),
+      ],
+      subject: '$kAppName - Gastos (Excel)',
     );
   }
 
