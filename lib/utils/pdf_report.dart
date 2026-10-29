@@ -1,6 +1,17 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+/// Un gráfico de barras horizontales del PDF.
+class PdfChart {
+  final String title;
+  final List<MapEntry<String, double>> bars;
+
+  /// Color de las barras (RGB de 0 a 1).
+  final List<double> rgb;
+
+  const PdfChart({required this.title, required this.bars, this.rgb = const [0.15, 0.65, 0.55]});
+}
+
 /// Generador mínimo de PDF (Helvetica, A4) escrito sin paquetes externos:
 /// título, un gráfico de barras horizontales opcional y líneas de texto.
 /// Admite caracteres Latin-1 (acentos y ñ); el resto se sustituye por "?".
@@ -9,6 +20,7 @@ Uint8List buildSimplePdf({
   required List<String> lines,
   String? barsTitle,
   List<MapEntry<String, double>>? bars,
+  List<PdfChart>? extraCharts,
 }) {
   const double pageWidth = 595;
   const double pageHeight = 842;
@@ -53,10 +65,19 @@ Uint8List buildSimplePdf({
     wrapped.add(rest);
   }
 
-  final List<MapEntry<String, double>> chartBars =
+  // Gráficos: el principal (por categoría) y los extra (evolución, comparativas...).
+  final List<PdfChart> charts = [];
+  final List<MapEntry<String, double>> mainBars =
       (bars ?? const <MapEntry<String, double>>[]).where((e) => e.value > 0).take(10).toList();
-  final bool hasChart = chartBars.isNotEmpty;
-  final double chartHeight = hasChart ? 20 + chartBars.length * 15 + 10 : 0;
+  if (mainBars.isNotEmpty) charts.add(PdfChart(title: barsTitle ?? '', bars: mainBars));
+  for (final c in extraCharts ?? const <PdfChart>[]) {
+    final List<MapEntry<String, double>> b = c.bars.where((e) => e.value > 0).take(10).toList();
+    if (b.isNotEmpty) charts.add(PdfChart(title: c.title, bars: b, rgb: c.rgb));
+  }
+  double chartHeight = 0;
+  for (final c in charts) {
+    chartHeight += 20 + c.bars.length * 15 + 10;
+  }
 
   // Capacidad de líneas: la primera página pierde el espacio del gráfico.
   final int fullCapacity = ((pageHeight - 2 * margin - 30) / leading).floor();
@@ -97,20 +118,21 @@ Uint8List buildSimplePdf({
       content.write('BT\n/F1 16 Tf\n${n2(margin)} ${n2(y)} Td\n(${escape(clean(title))}) Tj\nET\n');
       y -= 30;
 
-      if (hasChart) {
-        if (barsTitle != null) {
-          content.write('BT\n/F1 11 Tf\n${n2(margin)} ${n2(y)} Td\n(${escape(clean(barsTitle))}) Tj\nET\n');
+      for (final chart in charts) {
+        if (chart.title.isNotEmpty) {
+          content.write('BT\n/F1 11 Tf\n${n2(margin)} ${n2(y)} Td\n(${escape(clean(chart.title))}) Tj\nET\n');
         }
         y -= 20;
-        final double maxValue = chartBars.map((e) => e.value).reduce((a, b) => a > b ? a : b);
+        final double maxValue = chart.bars.map((e) => e.value).reduce((a, b) => a > b ? a : b);
         const double labelWidth = 150;
         const double maxBarWidth = 250;
-        for (final bar in chartBars) {
+        final String color = '${n2(chart.rgb[0])} ${n2(chart.rgb[1])} ${n2(chart.rgb[2])}';
+        for (final bar in chart.bars) {
           final double width = (bar.value / maxValue * maxBarWidth).clamp(2.0, maxBarWidth).toDouble();
           String label = clean(bar.key);
           if (label.length > 26) label = '${label.substring(0, 25)}.';
           content.write('BT\n/F1 9 Tf\n${n2(margin)} ${n2(y)} Td\n(${escape(label)}) Tj\nET\n');
-          content.write('q\n0.15 0.65 0.55 rg\n${n2(margin + labelWidth)} ${n2(y - 2)} ${n2(width)} 9 re f\nQ\n');
+          content.write('q\n$color rg\n${n2(margin + labelWidth)} ${n2(y - 2)} ${n2(width)} 9 re f\nQ\n');
           content.write(
             'BT\n/F1 8 Tf\n${n2(margin + labelWidth + width + 6)} ${n2(y)} Td\n(${escape(bar.value.toStringAsFixed(0))}) Tj\nET\n',
           );

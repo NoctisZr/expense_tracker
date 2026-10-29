@@ -2,13 +2,13 @@
 // Los valores de repositorio y reportes salen de variables de GitHub Actions.
 
 /// Nombre de la app (viene de tool/app_name.txt: el único sitio donde se cambia).
-const String kAppName = 'Peculio';
+const String kAppName = 'Nuvio';
 
 /// Versión de la app (viene de pubspec.yaml).
-const String kAppVersion = '1.8.0';
+const String kAppVersion = '1.9.0';
 
 /// Número de build (lo que va después del "+" en pubspec.yaml).
-const int kAppBuild = 14;
+const int kAppBuild = 15;
 
 /// "owner/nombre" del repositorio de GitHub donde se publican los releases.
 /// Vacío = sin comprobación de actualizaciones.

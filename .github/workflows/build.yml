@@ -31,6 +31,9 @@ jobs:
         run: |
           flutter create --platforms=android --org com.noctis.expensetracker --project-name expense_tracker /tmp/scaffold
 
+      - name: Preparar herramienta para generar el icono de Nuvio
+        run: python3 -m pip install --user --break-system-packages Pillow
+
       - name: Generar la configuración de la app (versión, repositorio, reportes)
         env:
           REPO: ${{ github.repository }}

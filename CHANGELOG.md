@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.9.0
+- **Presupuesto semanal** (Planificación): límite por semana (lunes a domingo) con cuánto llevas,
+  cuánto te queda, cuánto puedes gastar por día y un aviso si vas más rápido de lo previsto.
+- **Sobres** (Planificación): reparte los ingresos del mes en sobres (por defecto 50/30/20), asigna
+  categorías a cada uno y mira cuánto queda; los sobres sin categorías son reservas (ahorro).
+- **Reporte PDF**: ahora incluye la comparativa con el mes anterior (variación de gastos e ingresos y
+  las categorías que más subieron y bajaron), la evolución de los últimos 6 meses e ingresos vs gastos.
+- **Primeros pasos**: lista que se completa sola (cuenta, primer gasto, ingreso, presupuesto).
+- Arreglo: la categoría larga («Comisión Bancaria») ya no se corta en la lista de gastos.
+- Los respaldos incluyen sobres y presupuesto semanal.
+
 ## 1.8.0
 - **Gastos en pareja** (en «Añadir gasto» → interruptor «Gasto en pareja»): guardas el total de la
   cuenta, quién pagó y tu parte (0–100 %). Solo tu parte cuenta como gasto tuyo. En Planificación

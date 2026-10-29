@@ -1,4 +1,4 @@
-# Peculio (antes «Expense Tracker»)
+# Nuvio — Finanzas personales
 
 App de finanzas personales para Android hecha con Flutter (Material 3):
 balance basado en tus ingresos reales, bóvedas de ahorro multi-divisa con
@@ -32,9 +32,9 @@ cada vez que subes el código.
 2. Pestaña **Actions**: el workflow "Compilar APK" arranca solo (~5 min).
 3. Al terminar, descarga el `.apk` desde la pestaña **Releases**.
 
-El ZIP solo trae `lib/` y `pubspec.yaml`; el workflow genera un
+El proyecto incluye `lib/`, `assets/nuvio_icon.png` y `pubspec.yaml`; el workflow genera un
 proyecto Flutter temporal para tomar prestada su carpeta `android/`,
-le agrega el permiso de Internet y compila. El `dependency_overrides`
+le agrega el permiso de Internet, genera el icono de Nuvio para Android y compila. El `dependency_overrides`
 de `flutter_plugin_android_lifecycle` en el `pubspec.yaml` evita que
 esa dependencia transitiva exija un compileSdk más nuevo que el que
 trae el scaffold por defecto.

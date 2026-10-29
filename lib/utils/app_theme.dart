@@ -22,9 +22,9 @@ ThemeData buildAppTheme({required bool isDark, required Color accent, ModTheme? 
   final Color defaultBackground = isDark ? AppColors.darkBackground : AppColors.lightBackground;
   final Color defaultCard = isDark ? AppColors.darkCard : AppColors.lightCard;
   final Color defaultCardAlt = isDark ? AppColors.darkCardAlt : const Color(0xFFE7E7EE);
-  final Color defaultTextPrimary = isDark ? Colors.white : const Color(0xFF1A1A24);
-  final Color defaultTextSecondary = isDark ? Colors.white54 : Colors.black45;
-  final Color defaultBorder = isDark ? Colors.white24 : Colors.black26;
+  final Color defaultTextPrimary = isDark ? const Color(0xFFF1FAFF) : const Color(0xFF10283B);
+  final Color defaultTextSecondary = isDark ? const Color(0xFF9BB4C5) : const Color(0xFF668092);
+  final Color defaultBorder = isDark ? const Color(0xFF23445B) : const Color(0xFFD8E6E8);
 
   final Color effectiveBackground = mod?.background ?? defaultBackground;
   final Color effectiveCard = mod?.card ?? defaultCard;
@@ -113,10 +113,12 @@ ThemeData buildAppTheme({required bool isDark, required Color accent, ModTheme? 
     scaffoldBackgroundColor: scaffoldBackground,
     canvasColor: scaffoldBackground,
     fontFamily: 'Roboto',
+    splashFactory: InkSparkle.splashFactory,
     appBarTheme: AppBarTheme(
       backgroundColor: scaffoldBackground,
       foregroundColor: colorScheme.onSurface,
       elevation: 0,
+      scrolledUnderElevation: 0,
       centerTitle: false,
     ),
     // Restaurado a CardThemeData
@@ -125,6 +127,7 @@ ThemeData buildAppTheme({required bool isDark, required Color accent, ModTheme? 
       elevation: effectiveElevation,
       margin: EdgeInsets.zero,
       shape: containerShapeBorderFor(cardShapeKey, effectiveCardRadius, side: cardBorderSide),
+      clipBehavior: Clip.antiAlias,
     ),
     dividerColor: colorScheme.outline,
     hintColor: hintColor,
@@ -136,10 +139,12 @@ ThemeData buildAppTheme({required bool isDark, required Color accent, ModTheme? 
       labelSmall: baseTextTheme.labelSmall?.copyWith(color: hintColor),
     ),
     inputDecorationTheme: InputDecorationTheme(
-      filled: false,
-      border: UnderlineInputBorder(borderSide: BorderSide(color: colorScheme.outline)),
-      enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: colorScheme.outline)),
-      focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: effectiveAccent, width: 2)),
+      filled: true,
+      fillColor: effectiveCardAlt.withValues(alpha: isDark ? 0.55 : 0.45),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: effectiveBorder.withValues(alpha: 0.65))),
+      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: effectiveAccent, width: 1.6)),
       labelStyle: TextStyle(color: hintColor),
       hintStyle: TextStyle(color: hintColor),
     ),
@@ -185,6 +190,9 @@ ThemeData buildAppTheme({required bool isDark, required Color accent, ModTheme? 
       unselectedItemColor: hintColor,
       type: BottomNavigationBarType.fixed,
       showUnselectedLabels: true,
+      elevation: 0,
+      selectedLabelStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+      unselectedLabelStyle: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w500),
     ),
     // Restaurado a DialogThemeData
     dialogTheme: DialogThemeData(

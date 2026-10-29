@@ -23,6 +23,9 @@ import '../widgets/category_selector_row.dart';
 import '../widgets/category_summary.dart';
 import '../widgets/couple_section.dart';
 import '../widgets/credits_section.dart';
+import '../widgets/envelopes_section.dart';
+import '../widgets/getting_started_card.dart';
+import '../widgets/weekly_budget_section.dart';
 import '../widgets/savings_rule_section.dart';
 import '../widgets/currency_dropdown.dart';
 import '../widgets/expense_calendar.dart';
@@ -189,11 +192,42 @@ class _DashboardScreenState extends State<DashboardScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Align(
-              alignment: Alignment.centerLeft,
-              child: WorkspaceSelector(),
+            Row(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(13),
+                  child: Image.asset(
+                    'assets/nuvio_icon.png',
+                    width: 46,
+                    height: 46,
+                    fit: BoxFit.cover,
+                  ),
+                ),
+                const SizedBox(width: 11),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Nuvio',
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.5,
+                        ),
+                      ),
+                      Text(
+                        'Tus finanzas, en equilibrio',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.62),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const WorkspaceSelector(),
+              ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 18),
             SizedBox(
               width: double.infinity,
               child: SegmentedButton<int>(
@@ -217,6 +251,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             const UpdateBanner(),
             const BackupNudgeCard(),
             const NextPaymentCard(),
+            const GettingStartedCard(),
             const AccountsSection(),
             const SizedBox(height: 18),
             SectionCard(
@@ -516,6 +551,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
               const CoupleSection(),
               const SizedBox(height: 18),
               const SavingsRuleSection(),
+              const SizedBox(height: 18),
+              const WeeklyBudgetSection(),
+              const SizedBox(height: 18),
+              const EnvelopesSection(),
               const SizedBox(height: 18),
               const DebtsSection(),
             ],

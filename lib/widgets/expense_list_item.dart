@@ -83,7 +83,7 @@ class ExpenseListItem extends StatelessWidget {
                 ),
                 Text(
                   '${locale.t(categoryLabelKey(expense.category))} · ${formatDateShort(expense.date)}',
-                  maxLines: 1,
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.bodySmall,
                 ),

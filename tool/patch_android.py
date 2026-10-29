@@ -11,11 +11,16 @@ import os
 import re
 import sys
 
+try:
+    from PIL import Image
+except ImportError:
+    Image = None
+
 android = sys.argv[1]
 with_notifications = len(sys.argv) > 2 and sys.argv[2] == "1"
 
-LIGHT_BG = "#F4F5F9"
-DARK_BG = "#16171F"
+LIGHT_BG = "#F2F8F7"
+DARK_BG = "#061525"
 
 
 def read(path):
@@ -54,7 +59,9 @@ def patch_manifest():
     # Nombre que se ve bajo el icono y en la lista de apps.
     label = app_name().replace("&", "&amp;").replace("<", "&lt;").replace('"', "&quot;")
     text, n_label = re.subn(r'android:label="[^"]*"', lambda m: f'android:label="{label}"', text, count=1)
+    text, n_icon = re.subn(r'android:icon="[^"]*"', 'android:icon="@mipmap/ic_launcher"', text, count=1)
     log(f"nombre de la app: {label}" if n_label else "no se encontró android:label en el manifiesto")
+    log("icono de Nuvio asignado" if n_icon else "no se encontró android:icon en el manifiesto")
 
     permissions = ["android.permission.INTERNET", "android.permission.USE_BIOMETRIC"]
     if with_notifications:
@@ -83,6 +90,25 @@ def patch_manifest():
         text, n = re.subn(r"</application>", receivers + "</application>", text, count=1)
         log("receptores de notificaciones añadidos" if n else "no se encontró </application>")
     write(path, text)
+    generate_launcher_icons()
+
+
+def generate_launcher_icons():
+    """Genera los iconos Android desde el PNG de marca incluido en assets."""
+    if Image is None:
+        log("Pillow no está instalado; se omite la generación del icono")
+        return
+    source = os.path.join(os.path.dirname(android), "assets", "nuvio_icon.png")
+    if not os.path.exists(source):
+        log("assets/nuvio_icon.png no encontrado; se omite el icono")
+        return
+    image = Image.open(source).convert("RGBA")
+    for density, size in {"mdpi": 48, "hdpi": 72, "xhdpi": 96, "xxhdpi": 144, "xxxhdpi": 192}.items():
+        folder = os.path.join(android, f"app/src/main/res/mipmap-{density}")
+        os.makedirs(folder, exist_ok=True)
+        resized = image.resize((size, size), Image.Resampling.LANCZOS)
+        resized.save(os.path.join(folder, "ic_launcher.png"), optimize=True)
+    log("iconos launcher generados para las cinco densidades Android")
 
 
 # ------------------------------------------------------------ MainActivity
@@ -124,7 +150,8 @@ def patch_launch_theme():
         write(os.path.join(res, "drawable-v21/launch_background.xml"), drawable)
 
     def styles(parent, splash):
-        extra = '        <item name="android:windowSplashScreenBackground">@color/launch_bg</item>\n' if splash else ""
+        extra = ('        <item name="android:windowSplashScreenBackground">@color/launch_bg</item>\n'
+                 '        <item name="android:windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>\n') if splash else ""
         return ('<?xml version="1.0" encoding="utf-8"?>\n<resources>\n'
                 f'    <style name="LaunchTheme" parent="{parent}">\n'
                 '        <item name="android:windowBackground">@drawable/launch_background</item>\n'

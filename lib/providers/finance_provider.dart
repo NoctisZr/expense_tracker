@@ -14,6 +14,7 @@ import '../models/vault_transaction.dart';
 import '../providers/currency_provider.dart';
 import '../utils/amortization.dart';
 import '../utils/couple_balance.dart';
+import '../utils/envelopes.dart';
 import '../utils/category_registry.dart';
 import '../models/workspace.dart';
 import '../utils/currency_list.dart';
@@ -267,6 +268,8 @@ class FinanceProvider extends ChangeNotifier {
     await settingsBox.delete('$_accountsKeyPrefix$id');
     await settingsBox.delete('$_transfersKeyPrefix$id');
     await settingsBox.delete('$_creditsKeyPrefix$id');
+    await settingsBox.delete('weekly_budget_$id');
+    await settingsBox.delete('envelopes_$id');
     await settingsBox.delete('$_lastAccountKeyPrefix$id');
     await settingsBox.delete('${_localCurrencyKey}_$id');
     _workspaces = _workspaces.where((w) => w.id != id).toList();
@@ -1804,6 +1807,8 @@ class FinanceProvider extends ChangeNotifier {
       'accounts': accounts.map((a) => a.toMap()).toList(),
       'transfers': transfers.map((t) => t.toMap()).toList(),
       'credits': credits.map((c) => c.toMap()).toList(),
+      'envelopes': envelopes.map((e) => e.toMap()).toList(),
+      'weeklyBudget': weeklyBudget,
     };
   }
 
@@ -1849,6 +1854,51 @@ class FinanceProvider extends ChangeNotifier {
           authorPart: currency.convert(e.amount, e.currency, _localCurrency),
           paidByAuthor: e.paidByCreator,
         )));
+  }
+
+  // --- Presupuesto semanal y sobres (v1.9) ---
+
+  String get _weeklyKey => 'weekly_budget_$_workspaceId';
+  String get _envelopesKey => 'envelopes_$_workspaceId';
+
+  /// Presupuesto de gasto por semana (0 = sin presupuesto semanal).
+  double get weeklyBudget {
+    final dynamic v = settingsBox.get(_weeklyKey);
+    return v is num && v > 0 ? v.toDouble() : 0;
+  }
+
+  void setWeeklyBudget(double value) {
+    settingsBox.put(_weeklyKey, value < 0 ? 0.0 : value);
+    notifyListeners();
+  }
+
+  /// Sobres de este espacio (vacío hasta que el usuario los configura).
+  List<Envelope> get envelopes {
+    final dynamic raw = settingsBox.get(_envelopesKey);
+    final List<Envelope> result = [];
+    if (raw is List) {
+      for (final item in raw) {
+        if (item is Map) {
+          try {
+            result.add(Envelope.fromMap(item));
+          } catch (_) {}
+        }
+      }
+    }
+    return result;
+  }
+
+  void saveEnvelopes(List<Envelope> list) {
+    settingsBox.put(_envelopesKey, list.map((e) => e.toMap()).toList());
+    notifyListeners();
+  }
+
+  /// "Primeros pasos": se oculta para siempre al tocar «Ocultar».
+  bool get gettingStartedDismissed => settingsBox.get('getting_started_dismissed', defaultValue: false) == true;
+
+  void dismissGettingStarted() {
+    settingsBox.put('getting_started_dismissed', true);
+    notifyListeners();
   }
 
   static const String _savingsRuleKey = 'savings_rule_pct';
@@ -2056,6 +2106,21 @@ class FinanceProvider extends ChangeNotifier {
       }
       await _saveCredits(imported);
     }
+
+    final dynamic envelopesJson = data['envelopes'];
+    if (envelopesJson is List && envelopesJson.isNotEmpty) {
+      final List<Envelope> imported = [];
+      for (final item in envelopesJson) {
+        if (item is Map) {
+          try {
+            imported.add(Envelope.fromMap(item));
+          } catch (_) {}
+        }
+      }
+      if (imported.isNotEmpty) await settingsBox.put(_envelopesKey, imported.map((e) => e.toMap()).toList());
+    }
+    final dynamic weeklyJson = data['weeklyBudget'];
+    if (weeklyJson is num && weeklyJson > 0) await settingsBox.put(_weeklyKey, weeklyJson.toDouble());
 
     notifyListeners();
   }
