@@ -5,10 +5,10 @@
 const String kAppName = 'Peculio';
 
 /// Versión de la app (viene de pubspec.yaml).
-const String kAppVersion = '1.7.0';
+const String kAppVersion = '1.8.0';
 
 /// Número de build (lo que va después del "+" en pubspec.yaml).
-const int kAppBuild = 13;
+const int kAppBuild = 14;
 
 /// "owner/nombre" del repositorio de GitHub donde se publican los releases.
 /// Vacío = sin comprobación de actualizaciones.

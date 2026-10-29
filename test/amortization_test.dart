@@ -171,6 +171,27 @@ void main() {
       final c = credit().copyWith(overrides: {2: 220.0});
       expect(c.amountFor(2), 220.0);
     });
+    test('modos de registro: B cuota entera, A nada, C solo interés y cargos', () {
+      final due = credit();
+      expect(due.expenseAmountFor(2), 214.23);
+      final now = due.copyWith(mode: CreditMode.now);
+      expect(now.expenseAmountFor(2), 0);
+      final interest = due.copyWith(mode: CreditMode.interest);
+      // cuota 2: interés 20.20 (capital 194.03)
+      expect(interest.expenseAmountFor(2), 20.20);
+      // la primera suma la comisión inicial (30) al interés 24.00
+      expect(interest.expenseAmountFor(1), 54.00);
+    });
+    test('el modo se conserva al guardar y leer', () {
+      final c = credit().copyWith(mode: CreditMode.interest);
+      expect(CreditPurchase.fromMap(Map<dynamic, dynamic>.from(c.toMap())).mode, CreditMode.interest);
+    });
+    test('seguro como % del saldo se suma a cada cuota', () {
+      final t = _terms(n: 2, rateType: RateType.none, rate: 0).copyWith(installmentFeePct: 1);
+      final s = buildSchedule(t);
+      expect(s[0].fees, 12.00); // 1 % de 1200
+      expect(s[1].fees, 6.00); // 1 % de 600
+    });
     test('saldo pendiente según las cuotas registradas', () {
       expect(credit().outstanding, 1200);
       expect(credit().copyWith(registeredCount: 2).outstanding, 815.74);

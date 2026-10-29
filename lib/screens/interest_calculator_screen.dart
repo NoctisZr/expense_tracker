@@ -18,7 +18,17 @@ import '../widgets/section_card.dart';
 /// crédito (el botón principal guarda el plan).
 class InterestCalculatorScreen extends StatefulWidget {
   final bool creditMode;
-  const InterestCalculatorScreen({super.key, this.creditMode = false});
+
+  /// Monto y moneda con los que se abre (p. ej. desde el formulario de gasto).
+  final double? initialAmount;
+  final String? initialCurrency;
+
+  const InterestCalculatorScreen({
+    super.key,
+    this.creditMode = false,
+    this.initialAmount,
+    this.initialCurrency,
+  });
 
   @override
   State<InterestCalculatorScreen> createState() => _InterestCalculatorScreenState();
@@ -45,7 +55,9 @@ class _InterestCalculatorScreenState extends State<InterestCalculatorScreen> {
   @override
   void initState() {
     super.initState();
-    _currency = context.read<FinanceProvider>().localCurrency;
+    _currency = widget.initialCurrency ?? context.read<FinanceProvider>().localCurrency;
+    final double? start = widget.initialAmount;
+    if (start != null && start > 0) _amount.text = start.toStringAsFixed(2);
   }
 
   @override
@@ -125,6 +137,7 @@ class _InterestCalculatorScreenState extends State<InterestCalculatorScreen> {
       purchaseDate: DateTime.now(),
       currency: _currency,
       accountId: result.accountId,
+      mode: result.mode,
       financed: real.principal,
       upfrontFee: _upfrontTotal,
       terms: real,
@@ -532,12 +545,14 @@ class _CreditDetails {
   final String category;
   final String? accountId;
   final DateTime firstDue;
+  final String mode;
 
   const _CreditDetails({
     required this.name,
     required this.category,
     required this.accountId,
     required this.firstDue,
+    required this.mode,
   });
 }
 
@@ -553,6 +568,7 @@ class _CreditDetailsDialogState extends State<_CreditDetailsDialog> {
   final TextEditingController _name = TextEditingController();
   String _category = ExpenseCategory.compras;
   String? _accountId;
+  String _mode = CreditMode.due;
   late DateTime _firstDue;
 
   @override
@@ -590,6 +606,7 @@ class _CreditDetailsDialogState extends State<_CreditDetailsDialog> {
       category: _category,
       accountId: _accountId,
       firstDue: _firstDue,
+      mode: _mode,
     ));
   }
 
@@ -620,8 +637,23 @@ class _CreditDetailsDialogState extends State<_CreditDetailsDialog> {
               icon: const Icon(Icons.event_rounded, size: 18),
               label: Text('${locale.t('primera_cuota_fecha')}: ${formatDateShort(_firstDue)}'),
             ),
-            const SizedBox(height: 8),
-            Text(locale.t('comision_suma_primera'), style: theme.textTheme.bodySmall),
+            const SizedBox(height: 12),
+            Text(locale.t('modo_registro'), style: theme.textTheme.bodySmall),
+            for (final m in CreditMode.all)
+              ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(
+                  _mode == m ? Icons.radio_button_checked_rounded : Icons.radio_button_unchecked_rounded,
+                  color: _mode == m ? theme.colorScheme.primary : theme.hintColor,
+                ),
+                title: Text(locale.t('modo_$m'), style: const TextStyle(fontSize: 13)),
+                onTap: () => setState(() => _mode = m),
+              ),
+            if (_mode == CreditMode.due) ...[
+              const SizedBox(height: 4),
+              Text(locale.t('comision_suma_primera'), style: theme.textTheme.bodySmall),
+            ],
           ],
         ),
       ),

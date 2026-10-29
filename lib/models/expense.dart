@@ -50,6 +50,13 @@ class Expense {
   String? creditId;
   int? installmentNumber;
 
+  /// Gasto en pareja (v1.8): total de la cuenta. [amount] es SOLO tu parte.
+  /// Null = gasto personal.
+  double? sharedTotal;
+
+  /// Quién pagó la cuenta completa: tú (true) o tu pareja (false).
+  bool paidByCreator;
+
   Expense({
     required this.id,
     required this.name,
@@ -65,6 +72,8 @@ class Expense {
     this.tags,
     this.creditId,
     this.installmentNumber,
+    this.sharedTotal,
+    this.paidByCreator = true,
   });
 
   Map<String, dynamic> toJson() => {
@@ -82,6 +91,8 @@ class Expense {
         if (tags != null && tags!.isNotEmpty) 'tags': tags,
         if (creditId != null) 'creditId': creditId,
         if (installmentNumber != null) 'installmentNumber': installmentNumber,
+        if (sharedTotal != null) 'sharedTotal': sharedTotal,
+        if (sharedTotal != null) 'paidByCreator': paidByCreator,
       };
 
   factory Expense.fromJson(Map<String, dynamic> json) => Expense(
@@ -99,6 +110,8 @@ class Expense {
         tags: (json['tags'] as List?)?.map((e) => e.toString()).toList(),
         creditId: json['creditId'] as String?,
         installmentNumber: (json['installmentNumber'] as num?)?.toInt(),
+        sharedTotal: (json['sharedTotal'] as num?)?.toDouble(),
+        paidByCreator: json['paidByCreator'] as bool? ?? true,
       );
 }
 
@@ -135,13 +148,16 @@ class ExpenseAdapter extends TypeAdapter<Expense> {
       // Campos añadidos en la v1.6 (créditos y cuotas).
       creditId: fields[12] as String?,
       installmentNumber: (fields[13] as num?)?.toInt(),
+      // Campos añadidos en la v1.8 (gastos en pareja).
+      sharedTotal: (fields[14] as num?)?.toDouble(),
+      paidByCreator: fields[15] as bool? ?? true,
     );
   }
 
   @override
   void write(BinaryWriter writer, Expense obj) {
     writer
-      ..writeByte(14)
+      ..writeByte(16)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -169,6 +185,10 @@ class ExpenseAdapter extends TypeAdapter<Expense> {
       ..writeByte(12)
       ..write(obj.creditId)
       ..writeByte(13)
-      ..write(obj.installmentNumber);
+      ..write(obj.installmentNumber)
+      ..writeByte(14)
+      ..write(obj.sharedTotal)
+      ..writeByte(15)
+      ..write(obj.paidByCreator);
   }
 }

@@ -13,6 +13,7 @@ import '../models/vault.dart';
 import '../models/vault_transaction.dart';
 import '../providers/currency_provider.dart';
 import '../utils/amortization.dart';
+import '../utils/couple_balance.dart';
 import '../utils/category_registry.dart';
 import '../models/workspace.dart';
 import '../utils/currency_list.dart';
@@ -445,6 +446,8 @@ class FinanceProvider extends ChangeNotifier {
     String? receiptPath,
     String? accountId,
     List<String>? tags,
+    double? sharedTotal,
+    bool paidByMe = true,
   }) {
     final expense = Expense(
       id: generateId(),
@@ -459,6 +462,8 @@ class FinanceProvider extends ChangeNotifier {
       receiptPath: receiptPath,
       accountId: accountId,
       tags: (tags == null || tags.isEmpty) ? null : tags,
+      sharedTotal: sharedTotal,
+      paidByCreator: paidByMe,
     );
     expensesBox.put(expense.id, expense);
     notifyListeners();
@@ -1623,6 +1628,20 @@ class FinanceProvider extends ChangeNotifier {
 
   /// Crea la compra a crédito y registra de una vez las cuotas que ya vencieron.
   void addCredit(CreditPurchase credit) {
+    // Modos A y C: la compra completa se gasta hoy, en un solo gasto.
+    if (credit.mode != CreditMode.due) {
+      final Expense purchase = Expense(
+        id: generateId(),
+        name: credit.name,
+        amount: credit.financed,
+        currency: credit.currency,
+        category: credit.category,
+        date: credit.purchaseDate,
+        accountId: credit.accountId,
+        creditId: credit.id,
+      );
+      expensesBox.put(purchase.id, purchase);
+    }
     _saveCredits([...credits, credit]);
     _applyCredits();
     notifyListeners();
@@ -1646,7 +1665,7 @@ class FinanceProvider extends ChangeNotifier {
     return Expense(
       id: generateId(),
       name: '${c.name} ($n/$total)',
-      amount: c.amountFor(n),
+      amount: c.expenseAmountFor(n),
       currency: c.currency,
       category: c.category,
       date: date,
@@ -1664,8 +1683,10 @@ class FinanceProvider extends ChangeNotifier {
     final CreditPurchase c = list[index];
     final Installment? next = c.nextInstallment;
     if (next == null) return;
-    final Expense expense = _installmentExpense(c, next.number, DateTime.now());
-    expensesBox.put(expense.id, expense);
+    if (c.expenseAmountFor(next.number) > 0) {
+      final Expense expense = _installmentExpense(c, next.number, DateTime.now());
+      expensesBox.put(expense.id, expense);
+    }
     list[index] = c.copyWith(registeredCount: c.registeredCount + 1);
     _saveCredits(list);
     notifyListeners();
@@ -1689,7 +1710,7 @@ class FinanceProvider extends ChangeNotifier {
     _saveCredits(list);
     for (final e in expensesBox.values.toList()) {
       if (e.creditId == creditId && e.installmentNumber == n) {
-        e.amount = updated.amountFor(n);
+        e.amount = updated.expenseAmountFor(n);
         e.localAmount = null;
         e.localCurrencyAtCreation = null;
         expensesBox.put(e.id, e);
@@ -1715,10 +1736,12 @@ class FinanceProvider extends ChangeNotifier {
       while (registered < schedule.length && guard < 60) {
         final Installment next = schedule[registered];
         if (next.dueDate.isAfter(now)) break;
-        final Expense expense = _installmentExpense(c, next.number, next.dueDate);
-        expensesBox.put(expense.id, expense);
+        if (c.expenseAmountFor(next.number) > 0) {
+          final Expense expense = _installmentExpense(c, next.number, next.dueDate);
+          expensesBox.put(expense.id, expense);
+          created++;
+        }
         registered++;
-        created++;
         guard++;
       }
       if (registered != c.registeredCount) {
@@ -1806,6 +1829,61 @@ class FinanceProvider extends ChangeNotifier {
       ].join(','));
     }
     return buffer.toString();
+  }
+
+  // ---------------------------------------------------------------------
+  // Pareja y regla de ahorro (v1.8)
+  // ---------------------------------------------------------------------
+
+  /// Gastos marcados como "en pareja", del más reciente al más antiguo.
+  List<Expense> get sharedExpenses {
+    final List<Expense> list = expenses.where((e) => e.sharedTotal != null).toList();
+    list.sort((a, b) => b.date.compareTo(a.date));
+    return list;
+  }
+
+  /// Saldo de pareja en moneda local: positivo = tu pareja te debe.
+  double coupleBalanceLocal(CurrencyProvider currency) {
+    return coupleNetBalance(sharedExpenses.map((e) => SharedEntry(
+          total: currency.convert(e.sharedTotal!, e.currency, _localCurrency),
+          authorPart: currency.convert(e.amount, e.currency, _localCurrency),
+          paidByAuthor: e.paidByCreator,
+        )));
+  }
+
+  static const String _savingsRuleKey = 'savings_rule_pct';
+
+  /// Porcentaje de los ingresos que quieres ahorrar (0 = regla desactivada).
+  double get savingsRulePct {
+    final dynamic v = settingsBox.get(_savingsRuleKey);
+    return v is num ? v.toDouble().clamp(0, 90).toDouble() : 0;
+  }
+
+  void setSavingsRulePct(double value) {
+    settingsBox.put(_savingsRuleKey, value.clamp(0, 90).toDouble());
+    notifyListeners();
+  }
+
+  /// Ingresos entre [start] y [end] (inclusive), en moneda local.
+  double incomeInRangeLocal(CurrencyProvider currency, DateTime start, DateTime end) {
+    double total = 0;
+    for (final i in incomes) {
+      if (i.date.isBefore(start) || i.date.isAfter(end)) continue;
+      total += currency.convert(i.amount, i.currency, _localCurrency);
+    }
+    return total;
+  }
+
+  /// Gastos entre [start] y [end] (inclusive), en moneda local.
+  double expensesInRangeLocal(CurrencyProvider currency, DateTime start, DateTime end) {
+    double total = 0;
+    for (final e in expenses) {
+      if (e.date.isBefore(start) || e.date.isAfter(end)) continue;
+      total += e.currency == _localCurrency
+          ? e.amount
+          : (e.localAmount ?? currency.convert(e.amount, e.currency, _localCurrency));
+    }
+    return total;
   }
 
   /// Filas para exportar los gastos a Excel: encabezados + una fila por gasto.

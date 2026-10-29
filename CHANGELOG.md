@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.8.0
+- **Gastos en pareja** (en «Añadir gasto» → interruptor «Gasto en pareja»): guardas el total de la
+  cuenta, quién pagó y tu parte (0–100 %). Solo tu parte cuenta como gasto tuyo. En Planificación
+  → «Gastos en pareja» ves quién le debe a quién. Es la base de la sincronización de la 2.0.
+- **Créditos**: nuevos modos de registro — A (todo hoy en un solo gasto) y C (la compra hoy y las cuotas
+  solo con su interés) además del B (cada cuota como gasto). Atajo «Pagar a crédito en cuotas» en
+  el formulario de gasto, con el monto ya escrito.
+- **Regla de ahorro** (Planificación): elige qué % de tus ingresos del mes quieres ahorrar y ve cuánto
+  te queda por gastar sin romper la meta.
+- **Modo simple** (Ajustes): letra más grande y solo lo básico (sin Planificación ni análisis).
+- Los respaldos incluyen los gastos en pareja y los modos de crédito.
+
 ## 1.7.0
 - **Gasto desde un SMS**: pega el mensaje de tu banco (botón del SMS junto a «Escanear factura») y
   la app lee el importe, el comercio, la fecha, la moneda y si es gasto o ingreso; lo revisas y guardas.

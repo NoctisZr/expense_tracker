@@ -14,6 +14,7 @@ class ThemeProvider extends ChangeNotifier {
   static const String _backgroundImagePathKey = 'backgroundImagePath';
   static const String _textScaleKey = 'textScale';
   static const String _userModsKey = 'userMods';
+  static const String _simpleModeKey = 'simpleMode';
 
   final Box settingsBox;
 
@@ -22,6 +23,7 @@ class ThemeProvider extends ChangeNotifier {
   ModTheme? _activeMod;
   String? _backgroundImagePath;
   double _textScale = 1.0;
+  bool _simpleMode = false;
 
   ThemeProvider(this.settingsBox) {
     _isDarkMode = settingsBox.get(_darkModeKey, defaultValue: true) as bool;
@@ -31,6 +33,7 @@ class ThemeProvider extends ChangeNotifier {
     ) as int;
     _accentColor = Color(storedColorValue);
     _backgroundImagePath = settingsBox.get(_backgroundImagePathKey) as String?;
+    _simpleMode = settingsBox.get(_simpleModeKey, defaultValue: false) == true;
     final dynamic storedScale = settingsBox.get(_textScaleKey);
     if (storedScale is num) _textScale = storedScale.toDouble().clamp(0.85, 1.4).toDouble();
 
@@ -91,6 +94,18 @@ class ThemeProvider extends ChangeNotifier {
     settingsBox.put(_textScaleKey, _textScale);
     notifyListeners();
   }
+
+  /// Modo simple: letra más grande y solo lo básico (sin Planificación ni análisis).
+  bool get simpleMode => _simpleMode;
+
+  void setSimpleMode(bool value) {
+    _simpleMode = value;
+    settingsBox.put(_simpleModeKey, value);
+    notifyListeners();
+  }
+
+  /// Tamaño de letra realmente aplicado (el modo simple exige al menos 1.25).
+  double get effectiveTextScale => _simpleMode && _textScale < 1.25 ? 1.25 : _textScale;
 
   void toggleDarkMode(bool value) {
     _isDarkMode = value;

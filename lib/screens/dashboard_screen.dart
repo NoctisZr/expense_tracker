@@ -4,6 +4,7 @@ import '../models/expense.dart';
 import '../providers/currency_provider.dart';
 import '../providers/finance_provider.dart';
 import '../providers/locale_provider.dart';
+import '../providers/theme_provider.dart';
 import '../utils/app_colors.dart';
 import '../utils/app_navigation.dart';
 import '../utils/category_style.dart';
@@ -20,7 +21,9 @@ import '../widgets/balance_donut_chart.dart';
 import '../widgets/budget_section.dart';
 import '../widgets/category_selector_row.dart';
 import '../widgets/category_summary.dart';
+import '../widgets/couple_section.dart';
 import '../widgets/credits_section.dart';
+import '../widgets/savings_rule_section.dart';
 import '../widgets/currency_dropdown.dart';
 import '../widgets/expense_calendar.dart';
 import '../widgets/expense_list_item.dart';
@@ -130,6 +133,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final currency = context.watch<CurrencyProvider>();
     final locale = context.watch<LocaleProvider>();
     final theme = Theme.of(context);
+    final bool simple = context.watch<ThemeProvider>().simpleMode;
+    if (simple && _view == 2) _view = 0;
 
     final expenses = finance.expenses;
     final vaults = finance.vaults;
@@ -196,7 +201,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 segments: [
                   ButtonSegment(value: 0, label: Text(locale.t('vista_resumen'), style: const TextStyle(fontSize: 12.5))),
                   ButtonSegment(value: 1, label: Text(locale.t('vista_movimientos'), style: const TextStyle(fontSize: 12.5))),
-                  ButtonSegment(value: 2, label: Text(locale.t('vista_planificacion'), style: const TextStyle(fontSize: 12.5))),
+                  if (!simple)
+                    ButtonSegment(value: 2, label: Text(locale.t('vista_planificacion'), style: const TextStyle(fontSize: 12.5))),
                 ],
                 selected: {_view},
                 onSelectionChanged: (selection) => setState(() => _view = selection.first),
@@ -322,10 +328,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   onViewDetails: () => showVaultDetailsSheet(context, vault: vault),
                 ),
               ),
-            const SizedBox(height: 18),
-            const AnalysisSection(),
-            const SizedBox(height: 18),
-            const AnnualSection(),
+            if (!simple) ...[
+              const SizedBox(height: 18),
+              const AnalysisSection(),
+              const SizedBox(height: 18),
+              const AnnualSection(),
+            ],
             const SizedBox(height: 18),
             const CategorySummary(),
             ],
@@ -504,6 +512,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
               const RecurringSection(),
               const SizedBox(height: 18),
               const CreditsSection(),
+              const SizedBox(height: 18),
+              const CoupleSection(),
+              const SizedBox(height: 18),
+              const SavingsRuleSection(),
               const SizedBox(height: 18),
               const DebtsSection(),
             ],

@@ -164,7 +164,7 @@ class ExpenseTrackerApp extends StatelessWidget {
               final double systemScale = mq.textScaler.scale(14) / 14;
               return MediaQuery(
                 data: mq.copyWith(
-                  textScaler: TextScaler.linear(systemScale * themeProvider.textScale),
+                  textScaler: TextScaler.linear(systemScale * themeProvider.effectiveTextScale),
                 ),
                 child: LockGate(child: child ?? const SizedBox.shrink()),
               );

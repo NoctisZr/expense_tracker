@@ -12,6 +12,7 @@ import 'category_selector_row.dart';
 import 'currency_dropdown.dart';
 import 'receipt_flow.dart';
 import 'sms_flow.dart';
+import '../screens/interest_calculator_screen.dart';
 import 'section_card.dart';
 
 class AddExpenseSection extends StatefulWidget {
@@ -33,6 +34,9 @@ class _AddExpenseSectionState extends State<AddExpenseSection> {
   DateTime _date = DateTime.now();
   int _splitCount = 1;
   bool _splitCreateDebt = true;
+  bool _coupleShared = false;
+  bool _paidByMe = true;
+  double _myShare = 50;
 
   @override
   void initState() {
@@ -93,11 +97,18 @@ class _AddExpenseSectionState extends State<AddExpenseSection> {
     // los demás te deben queda como deuda.
     double amount = total;
     String note = _noteController.text.trim();
-    final int split = _splitCount;
+    final int split = _coupleShared ? 1 : _splitCount;
     if (split > 1) {
       amount = double.parse((total / split).toStringAsFixed(2));
       final String splitNote = '${locale.t('total_cuenta')} ${formatAmount(total)} ÷ $split';
       note = note.isEmpty ? splitNote : '$note · $splitNote';
+    }
+
+    // Gasto en pareja: se guarda el total de la cuenta y solo TU parte como importe.
+    double? sharedTotal;
+    if (_coupleShared) {
+      sharedTotal = total;
+      amount = double.parse((total * _myShare / 100).toStringAsFixed(2));
     }
 
     // Foto del equivalente en moneda local con la tasa de hoy (solo si la
@@ -118,6 +129,8 @@ class _AddExpenseSectionState extends State<AddExpenseSection> {
       localAmount: localAmount,
       accountId: _accountId,
       tags: parseTags(_tagsController.text),
+      sharedTotal: sharedTotal,
+      paidByMe: _paidByMe,
     );
     finance.setLastAccountId(_accountId);
 
@@ -161,6 +174,14 @@ class _AddExpenseSectionState extends State<AddExpenseSection> {
     }
   }
 
+  /// Abre el formulario de compra a crédito con el monto ya escrito.
+  void _openCredit() {
+    final double? amount = double.tryParse(_amountController.text.trim().replaceAll(',', '.'));
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => InterestCalculatorScreen(creditMode: true, initialAmount: amount, initialCurrency: _currency),
+    ));
+  }
+
   @override
   Widget build(BuildContext context) {
     final locale = context.watch<LocaleProvider>();
@@ -177,6 +198,12 @@ class _AddExpenseSectionState extends State<AddExpenseSection> {
                 onPressed: () => startReceiptScan(context),
                 icon: const Icon(Icons.document_scanner_outlined, size: 18),
                 label: Text(locale.t('escanear_factura')),
+              ),
+              IconButton(
+                onPressed: _openCredit,
+                icon: const Icon(Icons.credit_score_outlined, size: 20),
+                tooltip: locale.t('pagar_a_credito'),
+                visualDensity: VisualDensity.compact,
               ),
               IconButton(
                 onPressed: () => startSmsImport(context),
@@ -295,6 +322,7 @@ class _AddExpenseSectionState extends State<AddExpenseSection> {
                 label: Text(_isToday ? locale.t('hoy') : formatDateShort(_date)),
               ),
               const Spacer(),
+              if (!_coupleShared) ...[
               Text(locale.t('dividir_entre'), style: theme.textTheme.bodyMedium),
               const SizedBox(width: 6),
               DropdownButtonHideUnderline(
@@ -313,9 +341,43 @@ class _AddExpenseSectionState extends State<AddExpenseSection> {
                   },
                 ),
               ),
+              ],
             ],
           ),
-          if (_splitCount > 1)
+          const Divider(height: 18),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            dense: true,
+            title: Text(locale.t('gasto_en_pareja')),
+            subtitle: Text(locale.t('gasto_en_pareja_ayuda'), style: theme.textTheme.bodySmall),
+            value: _coupleShared,
+            onChanged: (value) => setState(() => _coupleShared = value),
+          ),
+          if (_coupleShared) ...[
+            SizedBox(
+              width: double.infinity,
+              child: SegmentedButton<bool>(
+                showSelectedIcon: false,
+                segments: [
+                  ButtonSegment(value: true, label: Text(locale.t('pague_yo'), style: const TextStyle(fontSize: 12.5))),
+                  ButtonSegment(value: false, label: Text(locale.t('pago_pareja'), style: const TextStyle(fontSize: 12.5))),
+                ],
+                selected: {_paidByMe},
+                onSelectionChanged: (sel) => setState(() => _paidByMe = sel.first),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text('${locale.t('mi_parte')}: ${_myShare.round()} %', style: theme.textTheme.bodyMedium),
+            Slider(
+              value: _myShare,
+              min: 0,
+              max: 100,
+              divisions: 20,
+              label: '${_myShare.round()} %',
+              onChanged: (value) => setState(() => _myShare = value),
+            ),
+          ],
+          if (_splitCount > 1 && !_coupleShared)
             CheckboxListTile(
               contentPadding: EdgeInsets.zero,
               dense: true,

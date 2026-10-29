@@ -386,6 +386,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             const SizedBox(height: 16),
             SectionCard(
+              child: SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(locale.t('modo_simple')),
+                subtitle: Text(locale.t('modo_simple_ayuda')),
+                value: themeProvider.simpleMode,
+                onChanged: (value) => context.read<ThemeProvider>().setSimpleMode(value),
+              ),
+            ),
+            const SizedBox(height: 16),
+            SectionCard(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [

@@ -4,12 +4,23 @@ import '../utils/amortization.dart';
 /// No necesita adaptador de Hive: se guarda como lista de mapas simples en la
 /// caja de ajustes (clave `credits_<espacio>`).
 ///
-/// Modo de registro (v1.6): cada cuota genera un gasto en su fecha de
-/// vencimiento (visión de flujo de caja), igual que los gastos recurrentes.
+/// Modo de registro ([mode]):
+/// - `due` (B, por defecto): cada cuota genera un gasto en su vencimiento.
+/// - `now` (A): un solo gasto hoy por el total; las cuotas no generan gastos.
+/// - `interest` (C): un gasto hoy por el total y cada cuota solo registra su
+///   interés y cargos (el capital ya se gastó al comprar).
 ///
 /// Las cuotas se registran siempre en orden: [registeredCount] cuotas ya
 /// tienen su gasto. Al renegociar (cambiar tasa o plazo) las ya registradas
 /// quedan congeladas en [frozen] y solo se recalculan las futuras.
+class CreditMode {
+  CreditMode._();
+  static const String due = 'due';
+  static const String now = 'now';
+  static const String interest = 'interest';
+  static const List<String> all = [due, now, interest];
+}
+
 class CreditPurchase {
   final String id;
   final String name;
@@ -18,6 +29,9 @@ class CreditPurchase {
   final String currency;
   final String? accountId;
   final String? note;
+
+  /// Cómo se registran los gastos (ver [CreditMode]).
+  final String mode;
 
   /// Monto financiado original.
   final double financed;
@@ -49,6 +63,7 @@ class CreditPurchase {
     required this.terms,
     this.accountId,
     this.note,
+    this.mode = CreditMode.due,
     this.upfrontFee = 0,
     this.offset = 0,
     this.frozen = const [],
@@ -73,6 +88,22 @@ class CreditPurchase {
     final List<Installment> s = schedule;
     if (n < 1 || n > s.length) return 0;
     return round2(s[n - 1].total + (n == 1 ? upfrontFee : 0));
+  }
+
+  /// Monto del GASTO que genera la cuota [n] según el modo: la cuota entera
+  /// (B), nada (A) o solo interés y cargos (C). 0 = no genera gasto.
+  double expenseAmountFor(int n) {
+    switch (mode) {
+      case CreditMode.now:
+        return 0;
+      case CreditMode.interest:
+        final List<Installment> s = schedule;
+        if (n < 1 || n > s.length) return 0;
+        final double v = round2(amountFor(n) - s[n - 1].capital);
+        return v < 0 ? 0 : v;
+      default:
+        return amountFor(n);
+    }
   }
 
   /// Capital que falta por pagar.
@@ -134,6 +165,7 @@ class CreditPurchase {
     String? category,
     String? accountId,
     String? note,
+    String? mode,
     LoanTerms? terms,
     int? offset,
     List<Installment>? frozen,
@@ -151,6 +183,7 @@ class CreditPurchase {
         terms: terms ?? this.terms,
         accountId: accountId ?? this.accountId,
         note: note ?? this.note,
+        mode: mode ?? this.mode,
         offset: offset ?? this.offset,
         frozen: frozen ?? this.frozen,
         registeredCount: registeredCount ?? this.registeredCount,
@@ -200,7 +233,7 @@ class CreditPurchase {
         if (note != null && note!.isNotEmpty) 'note': note,
         'financed': financed,
         'upfrontFee': upfrontFee,
-        'mode': 'due',
+        'mode': mode,
         'terms': terms.toMap(),
         'offset': offset,
         'frozen': frozen.map((x) => x.toMap()).toList(),
@@ -232,6 +265,7 @@ class CreditPurchase {
       currency: map['currency'].toString(),
       accountId: map['accountId']?.toString(),
       note: map['note']?.toString(),
+      mode: CreditMode.all.contains(map['mode']?.toString()) ? map['mode'].toString() : CreditMode.due,
       financed: (map['financed'] as num).toDouble(),
       upfrontFee: (map['upfrontFee'] as num?)?.toDouble() ?? 0,
       terms: LoanTerms.fromMap(map['terms'] as Map),
