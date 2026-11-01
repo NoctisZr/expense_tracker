@@ -68,7 +68,7 @@ class _ModEditorScreenState extends State<ModEditorScreen> {
   }
 
   Future<void> _pick(String title, Color current, ValueChanged<Color> onPicked, {bool regenerate = false}) async {
-    final Color? color = await showColorPickerDialog(context, initial: current, title: title);
+    final Color? color = await showColorPickerDialog(context, current, title: title);
     if (color == null) return;
     setState(() {
       onPicked(color);
