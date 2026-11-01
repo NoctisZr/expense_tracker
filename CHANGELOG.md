@@ -1,5 +1,37 @@
 # Changelog
 
+## 2.0.0
+- **Pareja** (nueva pestaña): finanzas en pareja con sincronización entre dos teléfonos. Cada quien
+  conserva sus propios gastos y su propia moneda; lo de tu pareja se ve en un apartado aparte,
+  en solo lectura, y nunca se mezcla con tus datos, presupuestos ni reportes.
+- **Tú decides qué compartes**: gastos, ingresos, metas y deudas, cada uno con su interruptor
+  (por defecto no se comparte nada). Los «Gastos en pareja» (para dividir) siempre se comparten.
+- **Saldo y pagos**: la app calcula quién le debe a quién (convirtiendo entre monedas a tu moneda
+  local) y permite registrar pagos para saldar cuentas.
+- **Tutorial** al activar la función, y se puede volver a ver cuando quieras.
+- **Vincular**: una persona crea la pareja y comparte un código de 12 caracteres; la otra lo escribe.
+- **Privacidad**: todo viaja cifrado de extremo a extremo (AES-256-GCM); el servidor solo guarda
+  texto ilegible. Sin cuentas ni contraseñas. Funciona sin internet y sincroniza al volver.
+- Requiere los secretos `SUPABASE_URL` y `SUPABASE_ANON_KEY` en el repositorio (ver docs/SINCRONIZACION_PAREJA.md).
+
+## 1.9.2
+- **Primer inicio automático**: en una instalación nueva la app deduce tu país por la IP (una sola
+  consulta, solo se guarda el código de país; si no hay internet usa la región del teléfono) y deja
+  como moneda local la de ese país. Esa moneda es la que usan por defecto el presupuesto y el conversor.
+- **Idioma**: se usa el idioma del teléfono; si no es español, inglés o portugués, se usa el del país detectado.
+- **Cada moneda con su idioma**: al cambiar la moneda local en el Resumen, si esa moneda suele usarse
+  con otro idioma de la app, te ofrece cambiarlo (nunca lo cambia sola).
+- Quien actualiza desde una versión anterior (ya tiene datos) no ve ningún cambio.
+
+## 1.9.1
+- **Colores bajo tu control otra vez**: vuelven los colores originales (la paleta azul marino quedó
+  atrás) y se mantiene el nombre, el icono y la cabecera de Nuvio.
+- Nuevo **«Color personalizado»**: elige cualquier color con tono, intensidad y brillo.
+- Nuevo control **«Color en los fondos»**: de 0 % (fondos neutros) a 100 %, los fondos y las tarjetas
+  toman el tono de tu color de acento, así que cambiar el color sí transforma toda la app.
+- **«Restablecer colores»** vuelve al acento original con fondos neutros.
+- Los mods siguen mandando sobre los colores cuando hay uno activo.
+
 ## 1.9.0
 - **Presupuesto semanal** (Planificación): límite por semana (lunes a domingo) con cuánto llevas,
   cuánto te queda, cuánto puedes gastar por día y un aviso si vas más rápido de lo previsto.

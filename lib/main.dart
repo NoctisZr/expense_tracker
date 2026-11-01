@@ -7,6 +7,7 @@ import 'models/expense.dart';
 import 'models/income.dart';
 import 'models/vault.dart';
 import 'models/vault_transaction.dart';
+import 'providers/couple_provider.dart';
 import 'providers/currency_provider.dart';
 import 'providers/finance_provider.dart';
 import 'providers/locale_provider.dart';
@@ -146,6 +147,7 @@ class ExpenseTrackerApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => LocaleProvider(settingsBox)),
         ChangeNotifierProvider(create: (_) => CurrencyProvider(settingsBox)),
         ChangeNotifierProvider(create: (_) => UpdateProvider(settingsBox)),
+        ChangeNotifierProvider(create: (_) => CoupleProvider(settingsBox)),
         // lazy: false para que el bloqueo por PIN exista desde el primer frame.
         ChangeNotifierProvider(create: (_) => SecurityProvider(settingsBox), lazy: false),
         ChangeNotifierProvider<FinanceProvider>.value(value: financeProvider),
@@ -155,8 +157,18 @@ class ExpenseTrackerApp extends StatelessWidget {
           return MaterialApp(
             title: kAppName,
             debugShowCheckedModeBanner: false,
-            theme: buildAppTheme(isDark: false, accent: themeProvider.accentColor, mod: themeProvider.activeMod),
-            darkTheme: buildAppTheme(isDark: true, accent: themeProvider.accentColor, mod: themeProvider.activeMod),
+            theme: buildAppTheme(
+              isDark: false,
+              accent: themeProvider.accentColor,
+              mod: themeProvider.activeMod,
+              surfaceTint: themeProvider.surfaceTint,
+            ),
+            darkTheme: buildAppTheme(
+              isDark: true,
+              accent: themeProvider.accentColor,
+              mod: themeProvider.activeMod,
+              surfaceTint: themeProvider.surfaceTint,
+            ),
             themeMode: themeProvider.isDarkMode ? ThemeMode.dark : ThemeMode.light,
             builder: (context, child) {
               // Tamaño de texto del usuario multiplicado por el del sistema.

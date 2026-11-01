@@ -19,8 +19,8 @@ except ImportError:
 android = sys.argv[1]
 with_notifications = len(sys.argv) > 2 and sys.argv[2] == "1"
 
-LIGHT_BG = "#F2F8F7"
-DARK_BG = "#061525"
+LIGHT_BG = "#F4F5F9"
+DARK_BG = "#16171F"
 
 
 def read(path):

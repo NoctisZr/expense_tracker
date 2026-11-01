@@ -39,6 +39,8 @@ jobs:
           REPO: ${{ github.repository }}
           FEEDBACK_URL: ${{ vars.FEEDBACK_URL }}
           FEEDBACK_APP_KEY: ${{ vars.FEEDBACK_APP_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL || vars.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY || vars.SUPABASE_ANON_KEY }}
         run: python3 tool/gen_app_config.py
 
       - name: Analizar el código (informativo, no bloquea el build)

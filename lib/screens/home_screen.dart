@@ -5,7 +5,10 @@ import 'package:provider/provider.dart';
 import '../models/rate_alert.dart';
 import '../providers/currency_provider.dart';
 import '../providers/update_provider.dart';
+import '../providers/couple_provider.dart';
 import '../providers/finance_provider.dart';
+import '../services/region_service.dart';
+import '../utils/region_defaults.dart';
 import '../providers/locale_provider.dart';
 import '../providers/theme_provider.dart';
 import '../services/backup_service.dart';
@@ -89,6 +92,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         if (mounted) context.read<CurrencyProvider>().refreshIfStale();
       });
       _maybeShowOnboarding();
+      _autoDetectRegion();
+      _syncCouple();
 
       // Avisos programados, atajos de pantalla y alertas de tasas.
       _finance = context.read<FinanceProvider>()..addListener(_onFinanceChanged);
@@ -110,6 +115,43 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         if (mounted) _runAutoBackupIfDue();
       });
     });
+  }
+
+  /// Si hay pareja vinculada, sincroniza al abrir la app (sin bloquear nada).
+  void _syncCouple() {
+    if (!mounted) return;
+    final couple = context.read<CoupleProvider>();
+    if (couple.isLinked) couple.syncIfLinked(context.read<FinanceProvider>());
+  }
+
+  /// Primer inicio de una instalación nueva: deduce el país por IP y deja
+  /// como moneda local la de ese país (la usan el presupuesto y el conversor)
+  /// y, si el idioma del teléfono no está disponible, el idioma del país.
+  /// Solo se envía una consulta y se guarda únicamente el código de país.
+  Future<void> _autoDetectRegion() async {
+    if (!mounted) return;
+    final finance = context.read<FinanceProvider>();
+    final locale = context.read<LocaleProvider>();
+    if (finance.settingsBox.get('regionAutoDone') == true) return;
+    final bool hasData = finance.expensesBox.isNotEmpty ||
+        finance.incomesBox.isNotEmpty ||
+        finance.vaultsBox.isNotEmpty;
+    if (hasData) {
+      await finance.settingsBox.put('regionAutoDone', true);
+      return;
+    }
+    final String? country = await RegionService().detectCountry();
+    if (country == null || !mounted) return;
+    final String? currency = finance.applyDetectedCountry(country);
+    final String? language = languageForRegion(country: country, currency: currency);
+    if (language != null) locale.applyRegionLanguage(language);
+    await finance.settingsBox.put('regionAutoDone', true);
+    if (currency != null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        duration: const Duration(seconds: 7),
+        content: Text(locale.t('region_listo').replaceAll('{c}', currency).replaceAll('{p}', country)),
+      ));
+    }
   }
 
   /// La bienvenida solo se muestra en una instalación nueva (sin datos). A

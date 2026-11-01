@@ -21,8 +21,9 @@ import '../widgets/balance_donut_chart.dart';
 import '../widgets/budget_section.dart';
 import '../widgets/category_selector_row.dart';
 import '../widgets/category_summary.dart';
-import '../widgets/couple_section.dart';
+import '../widgets/couple_view.dart';
 import '../widgets/credits_section.dart';
+import '../widgets/region_helpers.dart';
 import '../widgets/envelopes_section.dart';
 import '../widgets/getting_started_card.dart';
 import '../widgets/weekly_budget_section.dart';
@@ -137,7 +138,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final locale = context.watch<LocaleProvider>();
     final theme = Theme.of(context);
     final bool simple = context.watch<ThemeProvider>().simpleMode;
-    if (simple && _view == 2) _view = 0;
+    if (simple && (_view == 2 || _view == 3)) _view = 0;
 
     final expenses = finance.expenses;
     final vaults = finance.vaults;
@@ -233,10 +234,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
               child: SegmentedButton<int>(
                 showSelectedIcon: false,
                 segments: [
-                  ButtonSegment(value: 0, label: Text(locale.t('vista_resumen'), style: const TextStyle(fontSize: 12.5))),
-                  ButtonSegment(value: 1, label: Text(locale.t('vista_movimientos'), style: const TextStyle(fontSize: 12.5))),
+                  ButtonSegment(value: 0, label: Text(locale.t('vista_resumen'), style: const TextStyle(fontSize: 11.5))),
+                  ButtonSegment(value: 1, label: Text(locale.t('vista_movimientos'), style: const TextStyle(fontSize: 11.5))),
                   if (!simple)
-                    ButtonSegment(value: 2, label: Text(locale.t('vista_planificacion'), style: const TextStyle(fontSize: 12.5))),
+                    ButtonSegment(value: 2, label: Text(locale.t('vista_planificacion'), style: const TextStyle(fontSize: 11.5))),
+                  if (!simple)
+                    ButtonSegment(value: 3, label: Text(locale.t('pa_titulo'), style: const TextStyle(fontSize: 11.5))),
                 ],
                 selected: {_view},
                 onSelectionChanged: (selection) => setState(() => _view = selection.first),
@@ -264,7 +267,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                   CurrencyDropdown(
                     value: finance.localCurrency,
-                    onChanged: (value) => finance.setLocalCurrency(value),
+                    onChanged: (value) {
+                      finance.setLocalCurrency(value);
+                      maybeSuggestLanguage(context, value);
+                    },
                   ),
                 ],
               ),
@@ -537,6 +543,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               ),
             ],
+            if (_view == 3) const CoupleView(),
             if (_view == 2) ...[
               const UpcomingCharges(),
               const SubscriptionSuggestions(),
@@ -547,8 +554,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
               const RecurringSection(),
               const SizedBox(height: 18),
               const CreditsSection(),
-              const SizedBox(height: 18),
-              const CoupleSection(),
               const SizedBox(height: 18),
               const SavingsRuleSection(),
               const SizedBox(height: 18),

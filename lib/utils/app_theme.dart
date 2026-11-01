@@ -15,16 +15,38 @@ import '../utils/mod_shapes.dart';
 /// el grosor de borde, la sombra, la densidad general de la UI y una
 /// "máscara" (patrón dibujado o imagen propia) encima de toda la app.
 /// Todo esto es apariencia de superficie — nunca layout ni lógica.
-ThemeData buildAppTheme({required bool isDark, required Color accent, ModTheme? mod}) {
+/// Acerca un color de superficie (fondo, tarjeta) al tono del [accent].
+/// [amount] va de 0 (neutro, sin cambios) a 1 (fondos claramente teñidos).
+/// Conserva la luminosidad del color base: solo cambia el tono y la intensidad.
+Color tintedSurface(Color base, Color accent, double amount) {
+  if (amount <= 0) return base;
+  final double t = amount > 1 ? 1 : amount;
+  final HSLColor b = HSLColor.fromColor(base);
+  final HSLColor a = HSLColor.fromColor(accent);
+  final double saturation = b.saturation + (0.45 - b.saturation) * t;
+  final double lightness = b.lightness > 0.985 ? 0.985 : b.lightness;
+  return HSLColor.fromAHSL(1, a.hue, saturation.clamp(0.0, 1.0).toDouble(), lightness).toColor();
+}
+
+ThemeData buildAppTheme({
+  required bool isDark,
+  required Color accent,
+  ModTheme? mod,
+  double surfaceTint = 0,
+}) {
   final Color effectiveAccent = mod?.accent ?? accent;
   final Color onAccent = AppColors.onColorFor(effectiveAccent);
 
-  final Color defaultBackground = isDark ? AppColors.darkBackground : AppColors.lightBackground;
-  final Color defaultCard = isDark ? AppColors.darkCard : AppColors.lightCard;
-  final Color defaultCardAlt = isDark ? AppColors.darkCardAlt : const Color(0xFFE7E7EE);
-  final Color defaultTextPrimary = isDark ? const Color(0xFFF1FAFF) : const Color(0xFF10283B);
-  final Color defaultTextSecondary = isDark ? const Color(0xFF9BB4C5) : const Color(0xFF668092);
-  final Color defaultBorder = isDark ? const Color(0xFF23445B) : const Color(0xFFD8E6E8);
+  // Los fondos y tarjetas toman el tono del acento según [surfaceTint]
+  // (0 = neutros). Un mod activo siempre manda sobre estos valores.
+  final Color defaultBackground =
+      tintedSurface(isDark ? AppColors.darkBackground : AppColors.lightBackground, effectiveAccent, surfaceTint);
+  final Color defaultCard = tintedSurface(isDark ? AppColors.darkCard : AppColors.lightCard, effectiveAccent, surfaceTint);
+  final Color defaultCardAlt =
+      tintedSurface(isDark ? AppColors.darkCardAlt : const Color(0xFFE7E7EE), effectiveAccent, surfaceTint);
+  final Color defaultTextPrimary = isDark ? Colors.white : const Color(0xFF1A1A24);
+  final Color defaultTextSecondary = isDark ? Colors.white54 : Colors.black45;
+  final Color defaultBorder = isDark ? Colors.white24 : Colors.black26;
 
   final Color effectiveBackground = mod?.background ?? defaultBackground;
   final Color effectiveCard = mod?.card ?? defaultCard;

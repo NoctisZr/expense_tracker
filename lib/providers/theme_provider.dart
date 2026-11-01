@@ -15,6 +15,7 @@ class ThemeProvider extends ChangeNotifier {
   static const String _textScaleKey = 'textScale';
   static const String _userModsKey = 'userMods';
   static const String _simpleModeKey = 'simpleMode';
+  static const String _surfaceTintKey = 'surfaceTint';
 
   final Box settingsBox;
 
@@ -24,6 +25,7 @@ class ThemeProvider extends ChangeNotifier {
   String? _backgroundImagePath;
   double _textScale = 1.0;
   bool _simpleMode = false;
+  double _surfaceTint = 0;
 
   ThemeProvider(this.settingsBox) {
     _isDarkMode = settingsBox.get(_darkModeKey, defaultValue: true) as bool;
@@ -34,6 +36,8 @@ class ThemeProvider extends ChangeNotifier {
     _accentColor = Color(storedColorValue);
     _backgroundImagePath = settingsBox.get(_backgroundImagePathKey) as String?;
     _simpleMode = settingsBox.get(_simpleModeKey, defaultValue: false) == true;
+    final dynamic storedTint = settingsBox.get(_surfaceTintKey);
+    if (storedTint is num) _surfaceTint = storedTint.toDouble().clamp(0.0, 1.0).toDouble();
     final dynamic storedScale = settingsBox.get(_textScaleKey);
     if (storedScale is num) _textScale = storedScale.toDouble().clamp(0.85, 1.4).toDouble();
 
@@ -110,6 +114,26 @@ class ThemeProvider extends ChangeNotifier {
   void toggleDarkMode(bool value) {
     _isDarkMode = value;
     settingsBox.put(_darkModeKey, value);
+    notifyListeners();
+  }
+
+  /// Cuánto se tiñen fondos y tarjetas con el color de acento (0 = neutros).
+  double get surfaceTint => _surfaceTint;
+
+  void setSurfaceTint(double value) {
+    _surfaceTint = value.clamp(0.0, 1.0).toDouble();
+    settingsBox.put(_surfaceTintKey, _surfaceTint);
+    notifyListeners();
+  }
+
+  /// Vuelve al acento original y a fondos neutros.
+  void resetColors() {
+    _accentColor = AppColors.defaultAccent;
+    _surfaceTint = 0;
+    _activeMod = null;
+    settingsBox.put(_accentColorKey, AppColors.defaultAccent.toARGB32());
+    settingsBox.put(_surfaceTintKey, 0.0);
+    settingsBox.delete(_modJsonKey);
     notifyListeners();
   }
 

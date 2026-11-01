@@ -5,10 +5,10 @@
 const String kAppName = 'Nuvio';
 
 /// Versión de la app (viene de pubspec.yaml).
-const String kAppVersion = '1.9.0';
+const String kAppVersion = '2.0.0';
 
 /// Número de build (lo que va después del "+" en pubspec.yaml).
-const int kAppBuild = 15;
+const int kAppBuild = 18;
 
 /// "owner/nombre" del repositorio de GitHub donde se publican los releases.
 /// Vacío = sin comprobación de actualizaciones.
@@ -19,3 +19,8 @@ const String kFeedbackUrl = '';
 
 /// Clave que se envía en la cabecera X-App-Key (no es secreta: solo frena el spam casual).
 const String kFeedbackAppKey = '';
+
+/// Proyecto de Supabase para la sincronización de pareja. Vacío = función desactivada.
+/// La clave es pública por diseño (la seguridad la dan las políticas de la base de datos).
+const String kSupabaseUrl = '';
+const String kSupabaseKey = '';

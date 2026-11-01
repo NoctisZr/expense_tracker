@@ -28,12 +28,34 @@ class SharedEntry {
   double get myBalance => byMe ? owedToAuthor : -owedToAuthor;
 }
 
+/// Un pago entre ustedes para saldar cuentas (ya convertido a una moneda).
+class SettlementEntry {
+  final double amount;
+
+  /// Si quien anotó el pago fue quien pagó (a la otra persona).
+  final bool paidByAuthor;
+
+  /// Si el autor del registro soy yo.
+  final bool byMe;
+
+  const SettlementEntry({required this.amount, required this.paidByAuthor, this.byMe = true});
+
+  /// Efecto en mi saldo: si yo pagué, lo que me deben sube; si me pagaron, baja.
+  double get myBalance => (paidByAuthor == byMe) ? amount : -amount;
+}
+
 /// Saldo total de la pareja desde mi punto de vista, redondeado a 2 decimales:
 /// positivo = tu pareja te debe; negativo = tú le debes; 0 = están a mano.
-double coupleNetBalance(Iterable<SharedEntry> entries) {
+double coupleNetBalance(
+  Iterable<SharedEntry> entries, {
+  Iterable<SettlementEntry> settlements = const [],
+}) {
   double sum = 0;
   for (final e in entries) {
     sum += e.myBalance;
+  }
+  for (final s in settlements) {
+    sum += s.myBalance;
   }
   return (sum * 100).roundToDouble() / 100;
 }

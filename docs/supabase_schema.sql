@@ -51,23 +51,23 @@ $$;
 
 drop policy if exists couples_select on public.couples;
 create policy couples_select on public.couples
-  for select using (public.is_member(id));
+  for select to authenticated using (public.is_member(id));
 
 drop policy if exists members_select on public.couple_members;
 create policy members_select on public.couple_members
-  for select using (public.is_member(couple_id));
+  for select to authenticated using (public.is_member(couple_id));
 
 drop policy if exists items_select on public.shared_items;
 create policy items_select on public.shared_items
-  for select using (public.is_member(couple_id));
+  for select to authenticated using (public.is_member(couple_id));
 
 drop policy if exists items_insert on public.shared_items;
 create policy items_insert on public.shared_items
-  for insert with check (public.is_member(couple_id) and author_id = auth.uid());
+  for insert to authenticated with check (public.is_member(couple_id) and author_id = auth.uid());
 
 drop policy if exists items_update on public.shared_items;
 create policy items_update on public.shared_items
-  for update using (public.is_member(couple_id))
+  for update to authenticated using (public.is_member(couple_id))
   with check (public.is_member(couple_id));
 
 -- Crear la pareja (la persona que invita).
@@ -106,5 +106,75 @@ begin
 end;
 $$;
 
+-- Solo quien tiene sesión (incluidas las sesiones anónimas de la app) puede ejecutarlas.
+revoke execute on function public.create_couple(text) from public, anon;
+revoke execute on function public.join_couple(text) from public, anon;
+revoke execute on function public.is_member(uuid) from public, anon;
 grant execute on function public.create_couple(text) to authenticated;
 grant execute on function public.join_couple(text) to authenticated;
+grant execute on function public.is_member(uuid) to authenticated;
+
+
+-- =====================================================================
+-- Versión 2.0: ajustes aplicados al proyecto (ya están en tu Supabase).
+-- =====================================================================
+
+-- updated_at lo pone el servidor (no depende del reloj del teléfono).
+create or replace function public.set_updated_at()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
+
+drop trigger if exists shared_items_set_updated on public.shared_items;
+create trigger shared_items_set_updated
+  before insert or update on public.shared_items
+  for each row execute function public.set_updated_at();
+
+-- Cada persona solo puede modificar y borrar lo que ella misma escribió.
+drop policy if exists items_update on public.shared_items;
+create policy items_update on public.shared_items
+  for update to authenticated
+  using (public.is_member(couple_id) and author_id = auth.uid())
+  with check (public.is_member(couple_id) and author_id = auth.uid());
+
+drop policy if exists items_delete on public.shared_items;
+create policy items_delete on public.shared_items
+  for delete to authenticated
+  using (author_id = auth.uid());
+
+-- Cada persona puede salir de la pareja (borra solo su propia membresía).
+drop policy if exists members_delete on public.couple_members;
+create policy members_delete on public.couple_members
+  for delete to authenticated
+  using (user_id = auth.uid());
+
+-- Unirse con el código: hasta 4 identidades (2 personas + reinstalaciones).
+create or replace function public.join_couple(p_invite_hash text)
+returns uuid
+language plpgsql security definer
+set search_path = public
+as $$
+declare cid uuid;
+begin
+  if auth.uid() is null then raise exception 'not authenticated'; end if;
+  select id into cid from public.couples where invite_hash = p_invite_hash;
+  if cid is null then raise exception 'invalid code'; end if;
+  if (select count(*) from public.couple_members where couple_id = cid) >= 4
+     and not exists (select 1 from public.couple_members where couple_id = cid and user_id = auth.uid()) then
+    raise exception 'couple is full';
+  end if;
+  insert into public.couple_members (couple_id, user_id) values (cid, auth.uid())
+  on conflict do nothing;
+  return cid;
+end;
+$$;
+
+revoke execute on function public.join_couple(text) from public, anon;
+grant execute on function public.join_couple(text) to authenticated;
+revoke execute on function public.set_updated_at() from public, anon, authenticated;

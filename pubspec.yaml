@@ -1,7 +1,7 @@
 name: expense_tracker
 description: "Expense Tracker: dashboard de finanzas personales con bóvedas de ahorro y conversor de divisas en tiempo real."
 publish_to: 'none'
-version: 1.9.0+15
+version: 2.0.0+18
 
 environment:
   sdk: '>=3.4.0 <4.0.0'
@@ -31,6 +31,8 @@ dependencies:
 
   # Hash del PIN de bloqueo (Dart puro, sin código nativo)
   crypto: ^3.0.3
+  # Cifrado de extremo a extremo de la sincronización de pareja (AES-GCM).
+  cryptography: ^2.7.0
 
   # Fondo personalizado: elegir imagen + redimensionar/desenfocar
   image_picker: ^1.1.0

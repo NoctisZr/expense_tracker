@@ -21,6 +21,7 @@ import '../utils/csv_utils.dart';
 import '../utils/xlsx_reader.dart';
 import '../utils/currency_list.dart';
 import '../widgets/category_dialogs.dart';
+import '../widgets/color_picker_dialog.dart';
 import '../widgets/help_card.dart';
 import '../widgets/mod_gallery.dart';
 import '../widgets/notifications_card.dart';
@@ -381,6 +382,41 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       );
                     }).toList(),
                   ),
+                  const SizedBox(height: 14),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: () async {
+                          final Color? picked = await showColorPickerDialog(context, themeProvider.accentColor);
+                          if (picked != null && context.mounted) {
+                            context.read<ThemeProvider>().setAccentColor(picked);
+                          }
+                        },
+                        icon: const Icon(Icons.palette_outlined, size: 18),
+                        label: Text(locale.t('color_personalizado')),
+                      ),
+                      TextButton(
+                        onPressed: () => context.read<ThemeProvider>().resetColors(),
+                        child: Text(locale.t('restablecer_colores')),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    '${locale.t('color_fondos')}: ${(themeProvider.surfaceTint * 100).round()} %',
+                    style: theme.textTheme.bodyMedium,
+                  ),
+                  Slider(
+                    value: themeProvider.surfaceTint,
+                    min: 0,
+                    max: 1,
+                    divisions: 20,
+                    label: '${(themeProvider.surfaceTint * 100).round()} %',
+                    onChanged: (value) => context.read<ThemeProvider>().setSurfaceTint(value),
+                  ),
+                  Text(locale.t('color_fondos_ayuda'), style: theme.textTheme.bodySmall),
                 ],
               ),
             ),

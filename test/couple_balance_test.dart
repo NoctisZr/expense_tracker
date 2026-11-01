@@ -43,4 +43,27 @@ void main() {
     expect(coupleNetBalance(const []), 0);
     expect(coupleNetBalance(const [SharedEntry(total: 10, authorPart: 3.333, paidByAuthor: true)]), 6.67);
   });
+
+  group('pagos para saldar cuentas', () {
+    test('yo debía 30 y pago 30: queda a mano', () {
+      const debt = SharedEntry(total: 60, authorPart: 30, paidByAuthor: false); // -30
+      const pay = SettlementEntry(amount: 30, paidByAuthor: true); // yo pagué
+      expect(coupleNetBalance([debt], settlements: [pay]), 0);
+    });
+    test('mi pareja me debía 50 y me paga: a mano', () {
+      const owed = SharedEntry(total: 100, authorPart: 50, paidByAuthor: true); // +50
+      // lo anotó mi pareja: ella pagó (paidByAuthor) y el autor no soy yo
+      const pay = SettlementEntry(amount: 50, paidByAuthor: true, byMe: false);
+      expect(coupleNetBalance([owed], settlements: [pay]), 0);
+    });
+    test('mi pareja anota que yo le pagué: mi saldo sube', () {
+      const pay = SettlementEntry(amount: 20, paidByAuthor: false, byMe: false);
+      expect(pay.myBalance, 20);
+    });
+    test('pago parcial', () {
+      const debt = SharedEntry(total: 100, authorPart: 50, paidByAuthor: false); // -50
+      const pay = SettlementEntry(amount: 20, paidByAuthor: true);
+      expect(coupleNetBalance([debt], settlements: [pay]), -30);
+    });
+  });
 }

@@ -289,6 +289,18 @@ class FinanceProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Aplica la moneda del país detectado por IP (primer inicio). No hace nada
+  /// si el usuario ya eligió una moneda a mano. Devuelve la moneda aplicada.
+  String? applyDetectedCountry(String country) {
+    if (settingsBox.get('${_localCurrencyKey}_$_workspaceId') is String) return null;
+    final String? currency = kCountryToCurrency[country.toUpperCase()];
+    if (currency == null || !kSupportedCurrencies.contains(currency)) return null;
+    _localCurrency = currency;
+    settingsBox.put(_localCurrencyKey, currency);
+    notifyListeners();
+    return currency;
+  }
+
   /// Deduce una moneda soportada a partir de la región/idioma del teléfono.
   static String detectCurrencyFromLocale() {
     final Locale locale = PlatformDispatcher.instance.locale;

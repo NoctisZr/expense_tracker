@@ -7,6 +7,8 @@ Variables de entorno opcionales:
   REPO              owner/nombre del repositorio (para buscar actualizaciones)
   FEEDBACK_URL      URL del Worker de Telegram (para el botón de reportes)
   FEEDBACK_APP_KEY  clave que el Worker exige en la cabecera X-App-Key
+  SUPABASE_URL      URL del proyecto de Supabase (sincronización de pareja)
+  SUPABASE_ANON_KEY clave pública (publishable/anon) del proyecto de Supabase
 """
 import os
 import re
@@ -56,6 +58,11 @@ const String kFeedbackUrl = {q(os.environ.get('FEEDBACK_URL', ''))};
 
 /// Clave que se envía en la cabecera X-App-Key (no es secreta: solo frena el spam casual).
 const String kFeedbackAppKey = {q(os.environ.get('FEEDBACK_APP_KEY', ''))};
+
+/// Proyecto de Supabase para la sincronización de pareja. Vacío = función desactivada.
+/// La clave es pública por diseño (la seguridad la dan las políticas de la base de datos).
+const String kSupabaseUrl = {q(os.environ.get('SUPABASE_URL', '').rstrip('/'))};
+const String kSupabaseKey = {q(os.environ.get('SUPABASE_ANON_KEY', ''))};
 """
 with open("lib/app_config.dart", "w", encoding="utf-8") as f:
     f.write(content)
