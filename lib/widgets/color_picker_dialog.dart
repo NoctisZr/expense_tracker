@@ -5,13 +5,14 @@ import '../utils/app_colors.dart';
 
 /// Selector de color libre (tono, intensidad y brillo) sin dependencias
 /// externas. Devuelve el color elegido o null si se cancela.
-Future<Color?> showColorPickerDialog(BuildContext context, Color initial) {
-  return showDialog<Color>(context: context, builder: (_) => _ColorPickerDialog(initial: initial));
+Future<Color?> showColorPickerDialog(BuildContext context, Color initial, {String? title}) {
+  return showDialog<Color>(context: context, builder: (_) => _ColorPickerDialog(initial: initial, title: title));
 }
 
 class _ColorPickerDialog extends StatefulWidget {
   final Color initial;
-  const _ColorPickerDialog({required this.initial});
+  final String? title;
+  const _ColorPickerDialog({required this.initial, this.title});
 
   @override
   State<_ColorPickerDialog> createState() => _ColorPickerDialogState();
@@ -49,7 +50,7 @@ class _ColorPickerDialogState extends State<_ColorPickerDialog> {
         );
 
     return AlertDialog(
-      title: Text(locale.t('color_personalizado')),
+      title: Text(widget.title ?? locale.t('color_personalizado')),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
