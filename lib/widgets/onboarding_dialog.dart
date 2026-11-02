@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/finance_provider.dart';
 import '../providers/locale_provider.dart';
+import '../providers/theme_provider.dart';
 import 'currency_dropdown.dart';
 
 /// Bienvenida de 3 pasos que solo ve quien abre la app por primera vez
@@ -91,6 +92,23 @@ class _OnboardingDialogState extends State<_OnboardingDialog> {
                 ),
               ],
             ),
+            const SizedBox(height: 16),
+            Text(locale.t('onb_modo'), style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: SegmentedButton<bool>(
+                showSelectedIcon: false,
+                segments: [
+                  ButtonSegment(value: true, label: Text(locale.t('onb_modo_simple'))),
+                  ButtonSegment(value: false, label: Text(locale.t('onb_modo_completo'))),
+                ],
+                selected: {context.watch<ThemeProvider>().simpleMode},
+                onSelectionChanged: (s) => context.read<ThemeProvider>().setSimpleMode(s.first),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(locale.t('onb_modo_ayuda'), style: theme.textTheme.bodySmall),
           ],
         );
         break;

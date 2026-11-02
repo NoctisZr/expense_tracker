@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.1.0
+- **Interfaz más limpia y fácil de usar**:
+  - Pestañas grandes con icono (Resumen, Movimientos, Planes, Pareja): ya no se cortan las palabras.
+  - **Resumen**: primero tu balance, un botón grande de «Añadir gasto» y tus cuentas; el análisis, la vista
+    anual, las categorías y la moneda local pasan a «Más detalles», que se abre cuando lo necesitas.
+  - **Ajustes** ordenados en 5 secciones que se abren y cierran: Lo básico, Avisos y seguridad,
+    Mi dinero, Mis datos y Avanzado (mods y fondo personalizado).
+- **Al instalar** se pregunta cómo prefieres usarla: **Sencilla** (letra grande y solo lo básico) o **Completa**.
+- Selector de color: vuelve a tener el campo de código hex en el editor de mods, y «Color personalizado» de
+  Ajustes usa el mismo selector.
+
 ## 2.0.0
 - **Pareja** (nueva pestaña): finanzas en pareja con sincronización entre dos teléfonos. Cada quien
   conserva sus propios gastos y su propia moneda; lo de tu pareja se ve en un apartado aparte,

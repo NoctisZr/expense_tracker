@@ -22,6 +22,7 @@ import '../utils/xlsx_reader.dart';
 import '../utils/currency_list.dart';
 import '../widgets/category_dialogs.dart';
 import '../widgets/color_picker_dialog.dart';
+import '../widgets/settings_group.dart';
 import '../widgets/help_card.dart';
 import '../widgets/mod_gallery.dart';
 import '../widgets/notifications_card.dart';
@@ -305,6 +306,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
               style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 24),
+            SettingsGroup(
+              title: locale.t('ajustes_basico'),
+              subtitle: locale.t('ajustes_basico_d'),
+              icon: Icons.tune_rounded,
+              initiallyExpanded: true,
+              children: [
             SectionCard(
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -329,7 +336,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ],
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             SectionCard(
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -342,7 +349,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ],
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             SectionCard(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -389,7 +396,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     children: [
                       OutlinedButton.icon(
                         onPressed: () async {
-                          final Color? picked = await showColorPickerDialog(context, themeProvider.accentColor);
+                          final Color? picked = await showColorPickerDialog(
+                            context,
+                            themeProvider.accentColor,
+                            title: locale.t('color_personalizado'),
+                          );
                           if (picked != null && context.mounted) {
                             context.read<ThemeProvider>().setAccentColor(picked);
                           }
@@ -420,7 +431,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ],
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             SectionCard(
               child: SwitchListTile(
                 contentPadding: EdgeInsets.zero,
@@ -430,7 +441,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 onChanged: (value) => context.read<ThemeProvider>().setSimpleMode(value),
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             SectionCard(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -447,11 +458,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ],
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             const HelpCard(),
-            const SizedBox(height: 16),
+              ],
+            ),
+            SettingsGroup(
+              title: locale.t('ajustes_avisos'),
+              subtitle: locale.t('ajustes_avisos_d'),
+              icon: Icons.notifications_active_outlined,
+              children: [
             const NotificationsCard(),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             SectionCard(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -510,7 +527,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ],
               ),
             ),
-            const SizedBox(height: 16),
+              ],
+            ),
+            SettingsGroup(
+              title: locale.t('ajustes_dinero'),
+              subtitle: locale.t('ajustes_dinero_d'),
+              icon: Icons.account_balance_wallet_outlined,
+              children: [
             SectionCard(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -550,7 +573,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ],
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             SectionCard(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -586,7 +609,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ],
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             SectionCard(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -618,7 +641,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ],
               ),
             ),
-            const SizedBox(height: 16),
+              ],
+            ),
+            SettingsGroup(
+              title: locale.t('ajustes_datos'),
+              subtitle: locale.t('ajustes_datos_d'),
+              icon: Icons.folder_copy_outlined,
+              children: [
             SectionCard(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -696,7 +725,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ],
               ),
             ),
-            const SizedBox(height: 16),
+              ],
+            ),
+            SettingsGroup(
+              title: locale.t('ajustes_avanzado'),
+              subtitle: locale.t('ajustes_avanzado_d'),
+              icon: Icons.build_outlined,
+              children: [
             SectionCard(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -766,7 +801,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ],
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             SectionCard(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -819,6 +854,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ],
                 ],
               ),
+            ),
+              ],
             ),
           ],
         ),

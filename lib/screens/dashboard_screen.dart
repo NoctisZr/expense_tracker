@@ -22,6 +22,7 @@ import '../widgets/budget_section.dart';
 import '../widgets/category_selector_row.dart';
 import '../widgets/category_summary.dart';
 import '../widgets/couple_view.dart';
+import '../widgets/view_tabs.dart';
 import '../widgets/credits_section.dart';
 import '../widgets/region_helpers.dart';
 import '../widgets/envelopes_section.dart';
@@ -229,25 +230,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ],
             ),
             const SizedBox(height: 18),
-            SizedBox(
-              width: double.infinity,
-              child: SegmentedButton<int>(
-                showSelectedIcon: false,
-                segments: [
-                  ButtonSegment(value: 0, label: Text(locale.t('vista_resumen'), style: const TextStyle(fontSize: 11.5))),
-                  ButtonSegment(value: 1, label: Text(locale.t('vista_movimientos'), style: const TextStyle(fontSize: 11.5))),
-                  if (!simple)
-                    ButtonSegment(value: 2, label: Text(locale.t('vista_planificacion'), style: const TextStyle(fontSize: 11.5))),
-                  if (!simple)
-                    ButtonSegment(value: 3, label: Text(locale.t('pa_titulo'), style: const TextStyle(fontSize: 11.5))),
-                ],
-                selected: {_view},
-                onSelectionChanged: (selection) => setState(() => _view = selection.first),
-                style: SegmentedButton.styleFrom(
-                  selectedBackgroundColor: theme.colorScheme.primary,
-                  selectedForegroundColor: AppColors.onColorFor(theme.colorScheme.primary),
-                ),
-              ),
+            ViewTabs(
+              selected: _view,
+              onChanged: (value) => setState(() => _view = value),
+              items: [
+                ViewTabItem(value: 0, icon: Icons.dashboard_rounded, label: locale.t('vista_resumen')),
+                ViewTabItem(value: 1, icon: Icons.receipt_long_rounded, label: locale.t('vista_movimientos')),
+                if (!simple) ViewTabItem(value: 2, icon: Icons.event_note_rounded, label: locale.t('tab_planes')),
+                if (!simple) ViewTabItem(value: 3, icon: Icons.favorite_rounded, label: locale.t('pa_titulo')),
+              ],
             ),
             const SizedBox(height: 14),
             if (_view == 0) ...[
@@ -255,27 +246,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
             const BackupNudgeCard(),
             const NextPaymentCard(),
             const GettingStartedCard(),
-            const AccountsSection(),
-            const SizedBox(height: 18),
-            SectionCard(
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    '${locale.t('moneda_local')}:',
-                    style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-                  ),
-                  CurrencyDropdown(
-                    value: finance.localCurrency,
-                    onChanged: (value) {
-                      finance.setLocalCurrency(value);
-                      maybeSuggestLanguage(context, value);
-                    },
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 22),
             BalanceDonutChart(
               incomeAmount: incomeAmountLocal,
               incomeDate: mostRecentIncome?.date,
@@ -291,6 +261,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
               balanceNegativoTitulo: locale.t('balance_negativo_titulo'),
               balanceNegativoMensaje: locale.t('balance_negativo_mensaje'),
             ),
+            const SizedBox(height: 14),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () => setState(() => _view = 1),
+                icon: const Icon(Icons.add_rounded, size: 26),
+                label: Text(locale.t('anadir_gasto_grande'), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16)),
+              ),
+            ),
+            const SizedBox(height: 20),
+            const AccountsSection(),
             const SizedBox(height: 26),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -369,14 +351,46 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   onViewDetails: () => showVaultDetailsSheet(context, vault: vault),
                 ),
               ),
-            if (!simple) ...[
-              const SizedBox(height: 18),
-              const AnalysisSection(),
-              const SizedBox(height: 18),
-              const AnnualSection(),
-            ],
-            const SizedBox(height: 18),
-            const CategorySummary(),
+            const SizedBox(height: 14),
+            Theme(
+              data: theme.copyWith(dividerColor: Colors.transparent),
+              child: ExpansionTile(
+                tilePadding: const EdgeInsets.symmetric(horizontal: 4),
+                childrenPadding: const EdgeInsets.only(top: 6),
+                leading: Icon(Icons.unfold_more_rounded, color: theme.colorScheme.primary),
+                title: Text(locale.t('mas_detalles'),
+                    style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                subtitle: Text(locale.t('mas_detalles_ayuda'), style: theme.textTheme.bodySmall),
+                children: [
+                  SectionCard(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          '${locale.t('moneda_local')}:',
+                          style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                        ),
+                        CurrencyDropdown(
+                          value: finance.localCurrency,
+                          onChanged: (value) {
+                            finance.setLocalCurrency(value);
+                            maybeSuggestLanguage(context, value);
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  if (!simple) ...[
+                    const AnalysisSection(),
+                    const SizedBox(height: 18),
+                    const AnnualSection(),
+                    const SizedBox(height: 18),
+                  ],
+                  const CategorySummary(),
+                ],
+              ),
+            ),
             ],
             if (_view == 1) ...[
             const AddExpenseSection(),
