@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -45,14 +46,24 @@ class CoupleView extends StatefulWidget {
 
 class _CoupleViewState extends State<CoupleView> {
   Timer? _timer;
-  int _tab = 0; // 0 Saldo, 1 Su actividad, 2 Lo que comparto
+  final Random _rng = Random();
+  int _tab = 0; // 0 Saldo, 1 Actividad, 2 Metas, 3 Compartir
   String _filter = 'expenses';
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _sync());
-    _timer = Timer.periodic(const Duration(seconds: 90), (_) => _sync());
+    _schedule();
+  }
+
+  /// Cada ~45 s con un poco de azar, para que miles de teléfonos no consulten
+  /// al servidor en el mismo instante.
+  void _schedule() {
+    _timer = Timer(Duration(seconds: 40 + _rng.nextInt(15)), () async {
+      await _sync();
+      if (mounted) _schedule();
+    });
   }
 
   @override
@@ -61,10 +72,12 @@ class _CoupleViewState extends State<CoupleView> {
     super.dispose();
   }
 
-  void _sync() {
+  Future<void> _sync() async {
     if (!mounted) return;
     final couple = context.read<CoupleProvider>();
-    if (couple.isLinked) couple.syncNow(context.read<FinanceProvider>());
+    if (!couple.isLinked) return;
+    await couple.syncNow(context.read<FinanceProvider>());
+    if (mounted) couple.markSeen();
   }
 
   @override
@@ -98,9 +111,10 @@ class _CoupleViewState extends State<CoupleView> {
           child: SegmentedButton<int>(
             showSelectedIcon: false,
             segments: [
-              ButtonSegment(value: 0, label: Text(locale.t('pa_tab_saldo'), style: const TextStyle(fontSize: 12))),
-              ButtonSegment(value: 1, label: Text(locale.t('pa_tab_actividad'), style: const TextStyle(fontSize: 12))),
-              ButtonSegment(value: 2, label: Text(locale.t('pa_tab_mio'), style: const TextStyle(fontSize: 12))),
+              ButtonSegment(value: 0, label: Text(locale.t('pa_t_saldo'), style: const TextStyle(fontSize: 12))),
+              ButtonSegment(value: 1, label: Text(locale.t('pa_t_actividad'), style: const TextStyle(fontSize: 12))),
+              ButtonSegment(value: 2, label: Text(locale.t('pa_t_metas'), style: const TextStyle(fontSize: 12))),
+              ButtonSegment(value: 3, label: Text(locale.t('pa_t_compartir'), style: const TextStyle(fontSize: 12))),
             ],
             selected: {_tab},
             onSelectionChanged: (s) => setState(() => _tab = s.first),
@@ -115,7 +129,8 @@ class _CoupleViewState extends State<CoupleView> {
             filter: _filter,
             onFilter: (f) => setState(() => _filter = f),
           ),
-        if (_tab == 2) _MineTab(couple: couple, locale: locale),
+        if (_tab == 2) _GoalsTab(couple: couple, locale: locale),
+        if (_tab == 3) _MineTab(couple: couple, locale: locale),
       ],
     );
   }
@@ -561,6 +576,8 @@ class _BalanceTab extends StatelessWidget {
             ],
           ),
         ),
+        const SizedBox(height: 12),
+        _FixedCard(couple: couple, locale: locale),
         if (couple.mySettlements.isNotEmpty || couple.partner.settlements.isNotEmpty) ...[
           const SizedBox(height: 12),
           SectionCard(
@@ -1073,6 +1090,416 @@ class _MineTab extends StatelessWidget {
             icon: Icon(Icons.link_off_rounded, color: theme.colorScheme.error),
             label: Text(locale.t('pa_desvincular'), style: TextStyle(color: theme.colorScheme.error)),
           ),
+        ),
+      ],
+    );
+  }
+}
+
+
+// ---------------------------------------------------- gastos fijos compartidos
+class _FixedCard extends StatelessWidget {
+  final CoupleProvider couple;
+  final LocaleProvider locale;
+  const _FixedCard({required this.couple, required this.locale});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final List<Map<String, dynamic>> list = couple.fixedExpenses;
+    return SectionCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(child: SectionLabel(locale.t('pa_fijos_titulo'))),
+              IconButton(
+                onPressed: () => showDialog<void>(context: context, builder: (_) => const _FixedDialog()),
+                icon: Icon(Icons.add_circle_outline_rounded, color: theme.colorScheme.primary),
+                tooltip: locale.t('pa_fijo_nuevo'),
+                visualDensity: VisualDensity.compact,
+              ),
+            ],
+          ),
+          Text(locale.t('pa_fijos_ayuda'), style: theme.textTheme.bodySmall),
+          const SizedBox(height: 6),
+          if (list.isEmpty)
+            Text(locale.t('pa_fijos_vacio'), style: TextStyle(color: theme.hintColor))
+          else
+            for (final f in list)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 5),
+                child: Row(
+                  children: [
+                    Icon(Icons.event_repeat_rounded, size: 18, color: theme.colorScheme.primary),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(f['n'].toString(), maxLines: 1, overflow: TextOverflow.ellipsis),
+                          Text(
+                            '${formatCurrency((f['t'] as num).toDouble(), f['c'].toString())} · '
+                            '${locale.t('pa_fijo_cada_mes')} ${f['day']} · ${locale.t('mi_parte')} ${(f['sh'] as num).round()} % · '
+                            '${f['pp'] == true ? locale.t('quien_pago_yo') : locale.t('quien_pago_pareja')}',
+                            style: theme.textTheme.bodySmall,
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => couple.removeFixedExpense(f['id'].toString()),
+                      icon: Icon(Icons.delete_outline_rounded, color: theme.colorScheme.error, size: 20),
+                      tooltip: locale.t('pa_fijo_borrar'),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ],
+                ),
+              ),
+          if (list.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(locale.t('pa_fijo_aviso'), style: theme.textTheme.bodySmall),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _FixedDialog extends StatefulWidget {
+  const _FixedDialog();
+
+  @override
+  State<_FixedDialog> createState() => _FixedDialogState();
+}
+
+class _FixedDialogState extends State<_FixedDialog> {
+  final TextEditingController _name = TextEditingController();
+  final TextEditingController _total = TextEditingController();
+  final TextEditingController _day = TextEditingController(text: '1');
+  String _category = 'servicios';
+  bool _paidByMe = true;
+  double _share = 50;
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _total.dispose();
+    _day.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final locale = context.read<LocaleProvider>();
+    final finance = context.read<FinanceProvider>();
+    final couple = context.read<CoupleProvider>();
+    final double? total = double.tryParse(_total.text.trim().replaceAll(',', '.'));
+    final int? day = int.tryParse(_day.text.trim());
+    if (_name.text.trim().isEmpty || total == null || total <= 0 || day == null || day < 1 || day > 28) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(locale.t('campos_gasto_invalidos'))));
+      return;
+    }
+    await couple.addFixedExpense(
+      name: _name.text.trim(),
+      total: total,
+      currency: finance.localCurrency,
+      category: _category,
+      day: day,
+      paidByMe: _paidByMe,
+      myShare: _share,
+    );
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final locale = context.watch<LocaleProvider>();
+    final finance = context.read<FinanceProvider>();
+    final theme = Theme.of(context);
+    return AlertDialog(
+      title: Text(locale.t('pa_fijo_nuevo')),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: _name,
+              textCapitalization: TextCapitalization.sentences,
+              decoration: InputDecoration(labelText: locale.t('nombre')),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _total,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: InputDecoration(labelText: '${locale.t('pa_fijo_total')} (${finance.localCurrency})'),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _day,
+              keyboardType: TextInputType.number,
+              decoration: InputDecoration(labelText: locale.t('pa_fijo_dia')),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: SegmentedButton<bool>(
+                showSelectedIcon: false,
+                segments: [
+                  ButtonSegment(value: true, label: Text(locale.t('pague_yo'), style: const TextStyle(fontSize: 12))),
+                  ButtonSegment(value: false, label: Text(locale.t('pago_pareja'), style: const TextStyle(fontSize: 12))),
+                ],
+                selected: {_paidByMe},
+                onSelectionChanged: (sel) => setState(() => _paidByMe = sel.first),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text('${locale.t('mi_parte')}: ${_share.round()} %', style: theme.textTheme.bodyMedium),
+            Slider(
+              value: _share,
+              min: 0,
+              max: 100,
+              divisions: 20,
+              label: '${_share.round()} %',
+              onChanged: (v) => setState(() => _share = v),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.of(context).pop(), child: Text(locale.t('cancelar'))),
+        ElevatedButton(onPressed: _save, child: Text(locale.t('guardar'))),
+      ],
+    );
+  }
+}
+
+// ------------------------------------------------------------ metas en común
+class _GoalsTab extends StatelessWidget {
+  final CoupleProvider couple;
+  final LocaleProvider locale;
+  const _GoalsTab({required this.couple, required this.locale});
+
+  @override
+  Widget build(BuildContext context) {
+    final currency = context.watch<CurrencyProvider>();
+    final theme = Theme.of(context);
+    final List<GoalView> goals = couple.goalViews(currency);
+    final String other = couple.partner.name ?? locale.t('pa_tu_pareja');
+
+    return SectionCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(child: SectionLabel(locale.t('pa_metas_titulo'))),
+              IconButton(
+                onPressed: () => showDialog<void>(context: context, builder: (_) => const _GoalDialog()),
+                icon: Icon(Icons.add_circle_outline_rounded, color: theme.colorScheme.primary),
+                tooltip: locale.t('pa_meta_nueva'),
+                visualDensity: VisualDensity.compact,
+              ),
+            ],
+          ),
+          Text(locale.t('pa_metas_ayuda'), style: theme.textTheme.bodySmall),
+          const SizedBox(height: 8),
+          if (goals.isEmpty)
+            Text(locale.t('pa_meta_vacia'), style: TextStyle(color: theme.hintColor))
+          else
+            for (final g in goals)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(g.name, style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold)),
+                        ),
+                        Text('${(g.progress * 100).round()} %', style: const TextStyle(fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                    if (!g.mine)
+                      Text(locale.t('pa_meta_de_pareja').replaceAll('{n}', other), style: theme.textTheme.bodySmall),
+                    const SizedBox(height: 6),
+                    LinearProgressIndicator(
+                      value: g.progress,
+                      minHeight: 9,
+                      semanticsLabel: '${g.name} ${(g.progress * 100).round()} %',
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${formatCurrency(g.total, g.currency)} / ${formatCurrency(g.target, g.currency)}',
+                      style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                    ),
+                    Text(
+                      '${locale.t('pa_meta_tu_aporte')} ${formatAmount(g.myContributed)} · '
+                      '${locale.t('pa_meta_su_aporte').replaceAll('{n}', other)} ${formatAmount(g.partnerContributed)}',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                    if (g.done)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text(
+                          locale.t('pa_meta_cumplida'),
+                          style: TextStyle(color: theme.colorScheme.primary, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        OutlinedButton.icon(
+                          onPressed: () => showDialog<void>(context: context, builder: (_) => _ContributeDialog(goal: g)),
+                          icon: const Icon(Icons.savings_outlined, size: 18),
+                          label: Text(locale.t('pa_meta_aportar')),
+                        ),
+                        const Spacer(),
+                        if (g.mine)
+                          TextButton(
+                            onPressed: () => _confirmDelete(context, g),
+                            child: Text(locale.t('pa_meta_borrar'), style: TextStyle(color: theme.colorScheme.error)),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _confirmDelete(BuildContext context, GoalView g) async {
+    final finance = context.read<FinanceProvider>();
+    final bool? ok = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(locale.t('pa_meta_borrar')),
+        content: Text(locale.t('pa_meta_borrar_msg')),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: Text(locale.t('cancelar'))),
+          ElevatedButton(onPressed: () => Navigator.of(dialogContext).pop(true), child: Text(locale.t('eliminar'))),
+        ],
+      ),
+    );
+    if (ok == true) await couple.deleteGoal(g.id, finance);
+  }
+}
+
+class _GoalDialog extends StatefulWidget {
+  const _GoalDialog();
+
+  @override
+  State<_GoalDialog> createState() => _GoalDialogState();
+}
+
+class _GoalDialogState extends State<_GoalDialog> {
+  final TextEditingController _name = TextEditingController();
+  final TextEditingController _target = TextEditingController();
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _target.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final locale = context.read<LocaleProvider>();
+    final finance = context.read<FinanceProvider>();
+    final couple = context.read<CoupleProvider>();
+    final double? target = double.tryParse(_target.text.trim().replaceAll(',', '.'));
+    if (_name.text.trim().isEmpty || target == null || target <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(locale.t('campos_gasto_invalidos'))));
+      return;
+    }
+    await couple.createGoal(
+      name: _name.text.trim(),
+      target: target,
+      currency: finance.localCurrency,
+      finance: finance,
+    );
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final locale = context.watch<LocaleProvider>();
+    final finance = context.read<FinanceProvider>();
+    return AlertDialog(
+      title: Text(locale.t('pa_meta_nueva')),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: _name,
+            textCapitalization: TextCapitalization.sentences,
+            decoration: InputDecoration(labelText: locale.t('pa_meta_nombre')),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _target,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: InputDecoration(labelText: '${locale.t('pa_meta_objetivo')} (${finance.localCurrency})'),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.of(context).pop(), child: Text(locale.t('cancelar'))),
+        ElevatedButton(onPressed: _save, child: Text(locale.t('guardar'))),
+      ],
+    );
+  }
+}
+
+class _ContributeDialog extends StatefulWidget {
+  final GoalView goal;
+  const _ContributeDialog({required this.goal});
+
+  @override
+  State<_ContributeDialog> createState() => _ContributeDialogState();
+}
+
+class _ContributeDialogState extends State<_ContributeDialog> {
+  final TextEditingController _amount = TextEditingController();
+
+  @override
+  void dispose() {
+    _amount.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final locale = context.watch<LocaleProvider>();
+    final finance = context.read<FinanceProvider>();
+    return AlertDialog(
+      title: Text('${locale.t('pa_meta_aportar')} · ${widget.goal.name}'),
+      content: TextField(
+        controller: _amount,
+        autofocus: true,
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        decoration: InputDecoration(labelText: '${locale.t('pa_meta_aporte')} (${widget.goal.currency})'),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.of(context).pop(), child: Text(locale.t('cancelar'))),
+        ElevatedButton(
+          onPressed: () async {
+            final double? value = double.tryParse(_amount.text.trim().replaceAll(',', '.'));
+            if (value == null || value <= 0) return;
+            final couple = context.read<CoupleProvider>();
+            Navigator.of(context).pop();
+            await couple.contribute(
+              goalId: widget.goal.id,
+              amount: value,
+              currency: widget.goal.currency,
+              finance: finance,
+            );
+          },
+          child: Text(locale.t('guardar')),
         ),
       ],
     );

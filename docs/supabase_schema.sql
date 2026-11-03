@@ -178,3 +178,55 @@ $$;
 revoke execute on function public.join_couple(text) from public, anon;
 grant execute on function public.join_couple(text) to authenticated;
 revoke execute on function public.set_updated_at() from public, anon, authenticated;
+
+
+-- =====================================================================
+-- Versión 2.2: reglas optimizadas para escala (ya aplicadas a tu proyecto).
+-- =====================================================================
+
+-- Parejas del usuario actual: se evalúa UNA vez por consulta (no una función por fila).
+create or replace function public.my_couple_ids()
+returns setof uuid
+language sql stable security definer
+set search_path = public
+as $$
+  select couple_id from public.couple_members where user_id = (select auth.uid());
+$$;
+
+revoke execute on function public.my_couple_ids() from public, anon;
+grant execute on function public.my_couple_ids() to authenticated;
+
+drop policy if exists couples_select on public.couples;
+create policy couples_select on public.couples
+  for select to authenticated using (id in (select public.my_couple_ids()));
+
+drop policy if exists members_select on public.couple_members;
+create policy members_select on public.couple_members
+  for select to authenticated using (couple_id in (select public.my_couple_ids()));
+
+drop policy if exists members_delete on public.couple_members;
+create policy members_delete on public.couple_members
+  for delete to authenticated using (user_id = (select auth.uid()));
+
+drop policy if exists items_select on public.shared_items;
+create policy items_select on public.shared_items
+  for select to authenticated using (couple_id in (select public.my_couple_ids()));
+
+drop policy if exists items_insert on public.shared_items;
+create policy items_insert on public.shared_items
+  for insert to authenticated
+  with check (couple_id in (select public.my_couple_ids()) and author_id = (select auth.uid()));
+
+drop policy if exists items_update on public.shared_items;
+create policy items_update on public.shared_items
+  for update to authenticated
+  using (couple_id in (select public.my_couple_ids()) and author_id = (select auth.uid()))
+  with check (couple_id in (select public.my_couple_ids()) and author_id = (select auth.uid()));
+
+drop policy if exists items_delete on public.shared_items;
+create policy items_delete on public.shared_items
+  for delete to authenticated using (author_id = (select auth.uid()));
+
+-- Índice que coincide con la consulta de la app.
+drop index if exists public.shared_items_updated_idx;
+create index if not exists shared_items_pull_idx on public.shared_items (couple_id, updated_at, id);

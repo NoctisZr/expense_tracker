@@ -151,6 +151,64 @@ class PSettle {
       );
 }
 
+/// Meta en común (la creó tu pareja).
+class PGoal {
+  final String id;
+  final String name;
+  final double target;
+  final String currency;
+  const PGoal({required this.id, required this.name, required this.target, required this.currency});
+
+  factory PGoal.fromData(Map<String, dynamic> d) => PGoal(
+        id: (d['i'] ?? '').toString(),
+        name: (d['n'] ?? '').toString(),
+        target: _d(d['t']),
+        currency: (d['c'] ?? '').toString(),
+      );
+}
+
+/// Aporte de tu pareja a una meta en común.
+class PContrib {
+  final String goalId;
+  final double amount;
+  final String currency;
+  final DateTime date;
+  const PContrib({required this.goalId, required this.amount, required this.currency, required this.date});
+
+  factory PContrib.fromData(Map<String, dynamic> d) => PContrib(
+        goalId: (d['g'] ?? '').toString(),
+        amount: _d(d['a']),
+        currency: (d['c'] ?? '').toString(),
+        date: _date(d['d']),
+      );
+}
+
+/// Meta en común lista para mostrar: suma lo que aportó cada quien (en la
+/// moneda de la meta).
+class GoalView {
+  final String id;
+  final String name;
+  final double target;
+  final String currency;
+  final bool mine;
+  final double myContributed;
+  final double partnerContributed;
+
+  const GoalView({
+    required this.id,
+    required this.name,
+    required this.target,
+    required this.currency,
+    required this.mine,
+    required this.myContributed,
+    required this.partnerContributed,
+  });
+
+  double get total => myContributed + partnerContributed;
+  double get progress => target <= 0 ? 0 : (total / target).clamp(0.0, 1.0).toDouble();
+  bool get done => target > 0 && total >= target;
+}
+
 /// Todo lo que tu pareja comparte contigo (ya descifrado).
 class PartnerData {
   final String? name;
@@ -161,6 +219,8 @@ class PartnerData {
   final List<PVault> vaults;
   final List<PDebt> debts;
   final List<PSettle> settlements;
+  final List<PGoal> goals;
+  final List<PContrib> contribs;
 
   const PartnerData({
     this.name,
@@ -171,8 +231,15 @@ class PartnerData {
     this.vaults = const [],
     this.debts = const [],
     this.settlements = const [],
+    this.goals = const [],
+    this.contribs = const [],
   });
 
   bool get hasAnything =>
-      expenses.isNotEmpty || splits.isNotEmpty || incomes.isNotEmpty || vaults.isNotEmpty || debts.isNotEmpty;
+      expenses.isNotEmpty ||
+      splits.isNotEmpty ||
+      incomes.isNotEmpty ||
+      vaults.isNotEmpty ||
+      debts.isNotEmpty ||
+      goals.isNotEmpty;
 }

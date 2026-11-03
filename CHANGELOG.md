@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.2.0
+- **Pareja · Gastos fijos compartidos** (pestaña Saldo): renta, internet, servicios… Eliges monto, día del mes,
+  quién paga y cuánto te toca; se registran solos cada mes (también sin internet) y tu pareja los ve en
+  «Gastos para dividir».
+- **Pareja · Metas en común** (nueva pestaña Metas): crean una meta, cada quien aporta y los dos ven el progreso
+  y cuánto puso cada uno (aunque usen monedas distintas).
+- **Novedades**: una insignia roja en la pestaña Pareja cuando tu pareja registra algo nuevo.
+- **Más rápida y más robusta**: se actualiza cada ~45 s (antes 90) y casi al instante tras añadir un
+  «Gasto en pareja»; ante saturación del servidor reintenta con espera creciente y azar, y espera más si hay
+  errores seguidos.
+- **Pensada para escala** (a raíz de pruebas de carga): reglas de seguridad de la base de datos optimizadas
+  (se evalúan una vez por consulta) e índice nuevo. Se añade el kit `loadtest/` (Locust y k6) con guía para
+  medir p95/p99, límites y aislamiento entre parejas.
+
 ## 2.1.0
 - **Interfaz más limpia y fácil de usar**:
   - Pestañas grandes con icono (Resumen, Movimientos, Planes, Pareja): ya no se cortan las palabras.

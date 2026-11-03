@@ -10,6 +10,7 @@ import '../models/couple_models.dart';
 import '../services/supabase_rest.dart';
 import '../utils/couple_balance.dart';
 import '../utils/couple_crypto.dart';
+import '../utils/fixed_schedule.dart';
 import '../utils/id_generator.dart';
 import 'currency_provider.dart';
 import 'finance_provider.dart';
@@ -43,6 +44,11 @@ class CoupleProvider extends ChangeNotifier {
   bool _syncing = false;
   CoupleError? _lastError;
   PartnerData? _partnerMemo;
+  int? _unseenMemo;
+  int _failures = 0;
+  int _syncCount = 0;
+  Timer? _soon;
+  final Random _rng = Random();
 
   static const String _kId = 'couple_id';
   static const String _kKey = 'couple_key';
@@ -59,6 +65,11 @@ class CoupleProvider extends ChangeNotifier {
   static const String _kTutorial = 'couple_tutorial_done';
   static const String _kSettlements = 'couple_settlements';
   static const String _kMembers = 'couple_members';
+  static const String _kFixed = 'couple_fixed';
+  static const String _kFixedDone = 'couple_fixed_done';
+  static const String _kGoals = 'couple_goals';
+  static const String _kContribs = 'couple_contribs';
+  static const String _kSeen = 'couple_seen';
 
   // ------------------------------------------------------------- estado
   bool get isConfigured => kSupabaseUrl.isNotEmpty && kSupabaseKey.isNotEmpty;
@@ -104,6 +115,17 @@ class CoupleProvider extends ChangeNotifier {
     return out;
   }
 
+  void _invalidate() {
+    _partnerMemo = null;
+    _unseenMemo = null;
+  }
+
+  @override
+  void dispose() {
+    _soon?.cancel();
+    super.dispose();
+  }
+
   PartnerData get partner => _partnerMemo ??= _buildPartner();
 
   PartnerData _buildPartner() {
@@ -115,6 +137,8 @@ class CoupleProvider extends ChangeNotifier {
     final List<PVault> vaults = [];
     final List<PDebt> debts = [];
     final List<PSettle> settlements = [];
+    final List<PGoal> goals = [];
+    final List<PContrib> contribs = [];
     for (final entry in _readCache().values) {
       final String kind = (entry['kind'] ?? '').toString();
       final dynamic raw = entry['data'];
@@ -143,6 +167,12 @@ class CoupleProvider extends ChangeNotifier {
         case 'settle':
           settlements.add(PSettle.fromData(d));
           break;
+        case 'goal':
+          goals.add(PGoal.fromData(d));
+          break;
+        case 'contrib':
+          contribs.add(PContrib.fromData(d));
+          break;
       }
     }
     expenses.sort((a, b) => b.date.compareTo(a.date));
@@ -159,6 +189,8 @@ class CoupleProvider extends ChangeNotifier {
       vaults: vaults,
       debts: debts,
       settlements: settlements,
+      goals: goals,
+      contribs: contribs,
     );
   }
 
@@ -217,9 +249,226 @@ class CoupleProvider extends ChangeNotifier {
         'd': DateTime.now().toIso8601String(),
       });
     await _box.put(_kSettlements, list);
-    _partnerMemo = null;
+    _invalidate();
     notifyListeners();
     await syncNow(finance);
+  }
+
+
+  // ------------------------------------------------ gastos fijos compartidos
+  List<Map<String, dynamic>> _readList(String key) {
+    final dynamic raw = _box.get(key);
+    if (raw is! List) return [];
+    return raw.whereType<Map>().map((m) => Map<String, dynamic>.from(m)).toList();
+  }
+
+  List<Map<String, dynamic>> get fixedExpenses => _readList(_kFixed);
+
+  Future<void> addFixedExpense({
+    required String name,
+    required double total,
+    required String currency,
+    required String category,
+    required int day,
+    required bool paidByMe,
+    required double myShare,
+  }) async {
+    final List<Map<String, dynamic>> list = fixedExpenses
+      ..add({
+        'id': generateId(),
+        'n': name,
+        't': total,
+        'c': currency,
+        'cat': category,
+        'day': day.clamp(1, 28),
+        'pp': paidByMe,
+        'sh': myShare,
+        'start': DateTime.now().toIso8601String(),
+      });
+    await _box.put(_kFixed, list);
+    notifyListeners();
+  }
+
+  Future<void> removeFixedExpense(String id) async {
+    await _box.put(_kFixed, fixedExpenses.where((f) => f['id'] != id).toList());
+    notifyListeners();
+  }
+
+  /// Registra los gastos fijos que ya vencieron (uno por mes, sin repetir).
+  /// Funciona sin internet. Devuelve cuántos creó.
+  int applyFixed(FinanceProvider finance) {
+    if (!isLinked || workspaceId != finance.activeWorkspaceId) return 0;
+    final dynamic rawDone = _box.get(_kFixedDone);
+    final Map<String, bool> done = {};
+    if (rawDone is Map) rawDone.forEach((k, v) => done[k.toString()] = true);
+    int created = 0;
+    final DateTime now = DateTime.now();
+    for (final f in fixedExpenses) {
+      final DateTime? start = DateTime.tryParse((f['start'] ?? '').toString());
+      if (start == null) continue;
+      final double total = (f['t'] as num).toDouble();
+      final double share = (f['sh'] as num).toDouble();
+      for (final DateTime due in fixedDueDates(start: start, day: (f['day'] as num).toInt(), now: now)) {
+        final String key = '${f['id']}:${due.year}-${due.month}';
+        if (done.containsKey(key)) continue;
+        finance.addExpense(
+          name: f['n'].toString(),
+          amount: double.parse((total * share / 100).toStringAsFixed(2)),
+          currency: f['c'].toString(),
+          category: f['cat'].toString(),
+          date: due,
+          sharedTotal: total,
+          paidByMe: f['pp'] == true,
+        );
+        done[key] = true;
+        created++;
+      }
+    }
+    if (created > 0) _box.put(_kFixedDone, done);
+    return created;
+  }
+
+  // ------------------------------------------------------ metas en común
+  List<Map<String, dynamic>> get myGoals => _readList(_kGoals);
+  List<Map<String, dynamic>> get myContribs => _readList(_kContribs);
+
+  Future<void> createGoal({
+    required String name,
+    required double target,
+    required String currency,
+    required FinanceProvider finance,
+  }) async {
+    final List<Map<String, dynamic>> list = myGoals
+      ..add({
+        'id': generateId(),
+        'n': name,
+        't': target,
+        'c': currency,
+        'd': DateTime.now().toIso8601String(),
+      });
+    await _box.put(_kGoals, list);
+    notifyListeners();
+    syncSoon(finance);
+  }
+
+  Future<void> contribute({
+    required String goalId,
+    required double amount,
+    required String currency,
+    required FinanceProvider finance,
+  }) async {
+    final List<Map<String, dynamic>> list = myContribs
+      ..add({
+        'id': generateId(),
+        'g': goalId,
+        'a': amount,
+        'c': currency,
+        'd': DateTime.now().toIso8601String(),
+      });
+    await _box.put(_kContribs, list);
+    _invalidate();
+    notifyListeners();
+    syncSoon(finance);
+  }
+
+  /// Elimina una meta que creaste tú (y tus aportes a ella).
+  Future<void> deleteGoal(String id, FinanceProvider finance) async {
+    await _box.put(_kGoals, myGoals.where((g) => g['id'] != id).toList());
+    await _box.put(_kContribs, myContribs.where((c) => c['g'] != id).toList());
+    _invalidate();
+    notifyListeners();
+    syncSoon(finance);
+  }
+
+  /// Metas en común (tuyas y de tu pareja) con lo que aportó cada quien.
+  List<GoalView> goalViews(CurrencyProvider currency) {
+    final PartnerData p = partner;
+    double conv(double v, String from, String to) => (from.isEmpty || from == to) ? v : currency.convert(v, from, to);
+    final List<GoalView> out = [];
+    void add(String id, String name, double target, String cur, bool mine) {
+      double my = 0;
+      double other = 0;
+      for (final c in myContribs) {
+        if (c['g'] == id) my += conv((c['a'] as num).toDouble(), c['c'].toString(), cur);
+      }
+      for (final c in p.contribs) {
+        if (c.goalId == id) other += conv(c.amount, c.currency, cur);
+      }
+      out.add(GoalView(
+        id: id,
+        name: name,
+        target: target,
+        currency: cur,
+        mine: mine,
+        myContributed: my,
+        partnerContributed: other,
+      ));
+    }
+
+    for (final g in myGoals) {
+      add(g['id'].toString(), g['n'].toString(), (g['t'] as num).toDouble(), g['c'].toString(), true);
+    }
+    for (final g in p.goals) {
+      add(g.id, g.name, g.target, g.currency, false);
+    }
+    return out;
+  }
+
+  // ----------------------------------------------------------- novedades
+  static const Set<String> _newsKinds = {'expense', 'split', 'income', 'settle', 'goal', 'contrib'};
+
+  /// Novedades de tu pareja que aún no has visto (para la insignia de la pestaña).
+  int get unseenCount => _unseenMemo ??= _countUnseen();
+
+  int _countUnseen() {
+    final String? seen = _box.get(_kSeen) as String?;
+    int n = 0;
+    _readCache().forEach((_, v) {
+      if (!_newsKinds.contains(v['kind'])) return;
+      final String u = (v['u'] ?? '').toString();
+      if (seen == null || u.compareTo(seen) > 0) n++;
+    });
+    return n;
+  }
+
+  /// Marca todo lo de tu pareja como visto.
+  void markSeen() {
+    String? max;
+    _readCache().forEach((_, v) {
+      final String u = (v['u'] ?? '').toString();
+      if (u.isNotEmpty && (max == null || u.compareTo(max!) > 0)) max = u;
+    });
+    if (max != null && max != _box.get(_kSeen)) {
+      _box.put(_kSeen, max);
+      _unseenMemo = null;
+      notifyListeners();
+    }
+  }
+
+  /// Sincroniza en unos segundos (junta varios cambios seguidos en un solo envío).
+  void syncSoon(FinanceProvider finance) {
+    if (!isLinked) return;
+    _soon?.cancel();
+    _soon = Timer(const Duration(seconds: 3), () => syncNow(finance));
+  }
+
+  /// Reintenta con espera creciente y un poco de azar cuando el servidor está
+  /// saturado (429/5xx) o hay un corte de red, para no agravar una sobrecarga.
+  Future<T> _retry<T>(Future<T> Function() op) async {
+    int attempt = 0;
+    while (true) {
+      try {
+        return await op();
+      } catch (e) {
+        final bool retriable = e is SocketException ||
+            e is TimeoutException ||
+            e is http.ClientException ||
+            (e is SupabaseException && (e.statusCode == 429 || e.statusCode >= 500));
+        if (!retriable || attempt >= 3) rethrow;
+        attempt++;
+        await Future<void>.delayed(Duration(milliseconds: 600 * (1 << attempt) + _rng.nextInt(500)));
+      }
+    }
   }
 
   // --------------------------------------------------------- conexión
@@ -282,7 +531,8 @@ class CoupleProvider extends ChangeNotifier {
     await _box.delete(_kLastPull);
     await _box.delete(_kLastSync);
     await _box.delete(_kMembers);
-    _partnerMemo = null;
+    await _box.delete(_kSeen);
+    _invalidate();
     _lastError = null;
     notifyListeners();
   }
@@ -319,7 +569,9 @@ class CoupleProvider extends ChangeNotifier {
   /// Sincroniza si hay pareja vinculada y pasó al menos [minGap] desde la última vez.
   Future<void> syncIfLinked(FinanceProvider finance, {Duration minGap = const Duration(seconds: 60)}) async {
     final DateTime? last = lastSync;
-    if (last != null && DateTime.now().difference(last) < minGap) return;
+    // Si falló antes, se espera más cada vez (hasta 16 veces el intervalo base).
+    final Duration gap = minGap * (1 << _failures.clamp(0, 4).toInt());
+    if (last != null && DateTime.now().difference(last) < gap) return;
     await syncNow(finance);
   }
 
@@ -333,16 +585,21 @@ class CoupleProvider extends ChangeNotifier {
     _lastError = null;
     notifyListeners();
     try {
+      applyFixed(finance);
       final SupabaseSession s = await _ensureSession();
-      await _push(finance, s);
-      await _pull(s);
-      await _refreshMembers(s);
+      await _retry(() => _push(finance, s));
+      await _retry(() => _pull(s));
+      // Los miembros casi nunca cambian: se consultan hasta que llegue la pareja y luego cada 10 veces.
+      if (!hasPartner || _syncCount % 10 == 0) await _retry(() => _refreshMembers(s));
+      _syncCount++;
+      _failures = 0;
       await _box.put(_kLastSync, DateTime.now().toIso8601String());
     } catch (e) {
       _lastError = _map(e).error;
+      _failures++;
     } finally {
       _syncing = false;
-      _partnerMemo = null;
+      _invalidate();
       notifyListeners();
     }
   }
@@ -414,6 +671,12 @@ class CoupleProvider extends ChangeNotifier {
     }
     for (final s in mySettlements) {
       out['settle:${s['id']}'] = _Item('settle', {'a': s['a'], 'c': s['c'], 'pp': s['pp'], 'd': s['d']});
+    }
+    for (final g in myGoals) {
+      out['goal:${g['id']}'] = _Item('goal', {'i': g['id'], 'n': g['n'], 't': g['t'], 'c': g['c'], 'd': g['d']});
+    }
+    for (final c in myContribs) {
+      out['contrib:${c['id']}'] = _Item('contrib', {'g': c['g'], 'a': c['a'], 'c': c['c'], 'd': c['d']});
     }
     return out;
   }
@@ -559,11 +822,11 @@ class CoupleProvider extends ChangeNotifier {
     }
     for (final k in [
       _kId, _kKey, _kCode, _kWorkspace, _kPrefs, _kPushed, _kPushedUser, _kCache,
-      _kLastPull, _kLastSync, _kSettlements, _kMembers,
+      _kLastPull, _kLastSync, _kSettlements, _kMembers, _kFixed, _kFixedDone, _kGoals, _kContribs, _kSeen,
     ]) {
       await _box.delete(k);
     }
-    _partnerMemo = null;
+    _invalidate();
     _lastError = null;
     notifyListeners();
   }

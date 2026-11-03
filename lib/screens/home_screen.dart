@@ -121,7 +121,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void _syncCouple() {
     if (!mounted) return;
     final couple = context.read<CoupleProvider>();
-    if (couple.isLinked) couple.syncIfLinked(context.read<FinanceProvider>());
+    if (!couple.isLinked) return;
+    final finance = context.read<FinanceProvider>();
+    couple.applyFixed(finance); // registra los gastos fijos vencidos, incluso sin internet
+    couple.syncIfLinked(finance);
   }
 
   /// Primer inicio de una instalación nueva: deduce el país por IP y deja

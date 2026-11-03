@@ -4,7 +4,10 @@ class ViewTabItem {
   final int value;
   final IconData icon;
   final String label;
-  const ViewTabItem({required this.value, required this.icon, required this.label});
+
+  /// Cantidad de novedades (0 = sin insignia).
+  final int badge;
+  const ViewTabItem({required this.value, required this.icon, required this.label, this.badge = 0});
 }
 
 /// Pestañas grandes y claras (icono arriba, una palabra abajo) para cambiar
@@ -49,7 +52,28 @@ class ViewTabs extends StatelessWidget {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(item.icon, size: 22, color: item.value == selected ? primary : muted),
+                        Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            Icon(item.icon, size: 22, color: item.value == selected ? primary : muted),
+                            if (item.badge > 0)
+                              Positioned(
+                                right: -9,
+                                top: -5,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                  decoration: BoxDecoration(
+                                    color: theme.colorScheme.error,
+                                    borderRadius: BorderRadius.circular(9),
+                                  ),
+                                  child: Text(
+                                    item.badge > 9 ? '9+' : '${item.badge}',
+                                    style: const TextStyle(fontSize: 9.5, color: Colors.white, fontWeight: FontWeight.bold),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
                         const SizedBox(height: 3),
                         FittedBox(
                           fit: BoxFit.scaleDown,

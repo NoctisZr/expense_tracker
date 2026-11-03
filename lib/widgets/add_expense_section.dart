@@ -12,6 +12,7 @@ import 'category_selector_row.dart';
 import 'currency_dropdown.dart';
 import 'receipt_flow.dart';
 import 'sms_flow.dart';
+import '../providers/couple_provider.dart';
 import '../screens/interest_calculator_screen.dart';
 import 'section_card.dart';
 
@@ -132,6 +133,7 @@ class _AddExpenseSectionState extends State<AddExpenseSection> {
       sharedTotal: sharedTotal,
       paidByMe: _paidByMe,
     );
+    if (sharedTotal != null) context.read<CoupleProvider>().syncSoon(finance);
     finance.setLastAccountId(_accountId);
 
     if (split > 1 && _splitCreateDebt && total - amount > 0.009) {

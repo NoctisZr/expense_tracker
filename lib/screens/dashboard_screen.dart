@@ -21,6 +21,7 @@ import '../widgets/balance_donut_chart.dart';
 import '../widgets/budget_section.dart';
 import '../widgets/category_selector_row.dart';
 import '../widgets/category_summary.dart';
+import '../providers/couple_provider.dart';
 import '../widgets/couple_view.dart';
 import '../widgets/view_tabs.dart';
 import '../widgets/credits_section.dart';
@@ -237,7 +238,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ViewTabItem(value: 0, icon: Icons.dashboard_rounded, label: locale.t('vista_resumen')),
                 ViewTabItem(value: 1, icon: Icons.receipt_long_rounded, label: locale.t('vista_movimientos')),
                 if (!simple) ViewTabItem(value: 2, icon: Icons.event_note_rounded, label: locale.t('tab_planes')),
-                if (!simple) ViewTabItem(value: 3, icon: Icons.favorite_rounded, label: locale.t('pa_titulo')),
+                if (!simple)
+                  ViewTabItem(
+                    value: 3,
+                    icon: Icons.favorite_rounded,
+                    label: locale.t('pa_titulo'),
+                    badge: _view == 3 ? 0 : context.watch<CoupleProvider>().unseenCount,
+                  ),
               ],
             ),
             const SizedBox(height: 14),
