@@ -6,6 +6,7 @@ import '../models/rate_alert.dart';
 import '../providers/currency_provider.dart';
 import '../providers/update_provider.dart';
 import '../providers/couple_provider.dart';
+import '../widgets/update_banner.dart';
 import '../providers/finance_provider.dart';
 import '../services/region_service.dart';
 import '../utils/region_defaults.dart';
@@ -105,8 +106,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         if (mounted) _scheduleNotifications();
       });
 
-      Future.delayed(const Duration(seconds: 6), () {
-        if (mounted) context.read<UpdateProvider>().checkIfDue();
+      Future.delayed(const Duration(seconds: 6), () async {
+        if (!mounted) return;
+        await context.read<UpdateProvider>().checkIfDue();
+        _maybePromptUpdate();
       });
       Future.delayed(const Duration(seconds: 20), () {
         if (mounted) FeedbackService(context.read<FinanceProvider>().settingsBox).flushPending();
@@ -115,6 +118,17 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         if (mounted) _runAutoBackupIfDue();
       });
     });
+  }
+
+  /// Si hay una versión nueva, la muestra en pantalla al abrir la app (una vez
+  /// por sesión, salvo que se haya omitido esa versión).
+  void _maybePromptUpdate() {
+    if (!mounted) return;
+    final update = context.read<UpdateProvider>();
+    final info = update.available;
+    if (info == null || !update.promptPending) return;
+    update.markPrompted();
+    showUpdateDialog(context, info);
   }
 
   /// Si hay pareja vinculada, sincroniza al abrir la app (sin bloquear nada).

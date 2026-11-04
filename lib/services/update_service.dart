@@ -9,12 +9,19 @@ class UpdateInfo {
   final String pageUrl;
   final String? downloadUrl;
 
+  /// Tamaño en bytes y huella SHA-256 del APK (si GitHub la informa), para
+  /// comprobar que lo descargado está completo y sin alterar.
+  final int? downloadSize;
+  final String? downloadSha256;
+
   const UpdateInfo({
     required this.version,
     required this.build,
     required this.notes,
     required this.pageUrl,
     required this.downloadUrl,
+    this.downloadSize,
+    this.downloadSha256,
   });
 
   Map<String, dynamic> toMap() => {
@@ -23,6 +30,8 @@ class UpdateInfo {
         'notes': notes,
         'pageUrl': pageUrl,
         if (downloadUrl != null) 'downloadUrl': downloadUrl,
+        if (downloadSize != null) 'downloadSize': downloadSize,
+        if (downloadSha256 != null) 'downloadSha256': downloadSha256,
       };
 
   factory UpdateInfo.fromMap(Map<dynamic, dynamic> map) => UpdateInfo(
@@ -31,6 +40,8 @@ class UpdateInfo {
         notes: map['notes']?.toString() ?? '',
         pageUrl: map['pageUrl'].toString(),
         downloadUrl: map['downloadUrl']?.toString(),
+        downloadSize: (map['downloadSize'] as num?)?.toInt(),
+        downloadSha256: map['downloadSha256']?.toString(),
       );
 }
 
@@ -56,18 +67,30 @@ class UpdateService {
 
   /// Elige el APK adecuado a la arquitectura del teléfono entre los archivos
   /// del release; si no hay uno específico, el primer APK.
-  static String? pickAssetUrl(List<dynamic> assets, {required bool arm64}) {
-    String? fallback;
+  static String? pickAssetUrl(List<dynamic> assets, {required bool arm64}) =>
+      pickAsset(assets, arm64: arm64)?['browser_download_url']?.toString();
+
+  /// Igual que [pickAssetUrl] pero devuelve el archivo completo (con tamaño y huella).
+  static Map<dynamic, dynamic>? pickAsset(List<dynamic> assets, {required bool arm64}) {
+    Map<dynamic, dynamic>? fallback;
     for (final a in assets) {
       if (a is! Map) continue;
       final String name = (a['name'] ?? '').toString().toLowerCase();
       final String? url = a['browser_download_url']?.toString();
       if (url == null || !name.endsWith('.apk')) continue;
-      fallback ??= url;
-      if (arm64 && name.contains('arm64')) return url;
-      if (!arm64 && (name.contains('armeabi') || name.contains('v7a'))) return url;
+      fallback ??= a;
+      if (arm64 && name.contains('arm64')) return a;
+      if (!arm64 && (name.contains('armeabi') || name.contains('v7a'))) return a;
     }
     return fallback;
+  }
+
+  /// Extrae el SHA-256 en minúsculas de un campo `digest` como "sha256:abc…".
+  static String? sha256FromDigest(dynamic digest) {
+    final String d = (digest ?? '').toString().trim().toLowerCase();
+    if (!d.startsWith('sha256:')) return null;
+    final String hex = d.substring(7);
+    return RegExp(r'^[0-9a-f]{64}$').hasMatch(hex) ? hex : null;
   }
 
   /// Convierte la respuesta de la API en [UpdateInfo]. Ignora borradores,
@@ -79,12 +102,15 @@ class UpdateService {
     final String? version = versionFromTag(tag);
     if (build == null || version == null) return null;
     final List<dynamic> assets = json['assets'] is List ? json['assets'] as List<dynamic> : const [];
+    final Map<dynamic, dynamic>? asset = pickAsset(assets, arm64: arm64);
     return UpdateInfo(
       version: version,
       build: build,
       notes: (json['body'] ?? '').toString().trim(),
       pageUrl: (json['html_url'] ?? '').toString(),
-      downloadUrl: pickAssetUrl(assets, arm64: arm64),
+      downloadUrl: asset?['browser_download_url']?.toString(),
+      downloadSize: (asset?['size'] as num?)?.toInt(),
+      downloadSha256: sha256FromDigest(asset?['digest']),
     );
   }
 

@@ -23,6 +23,7 @@ import '../utils/currency_list.dart';
 import '../widgets/category_dialogs.dart';
 import '../widgets/color_picker_dialog.dart';
 import '../widgets/settings_group.dart';
+import '../widgets/update_card.dart';
 import '../widgets/help_card.dart';
 import '../widgets/mod_gallery.dart';
 import '../widgets/notifications_card.dart';
@@ -305,7 +306,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
               locale.t('ajustes'),
               style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 20),
+            const UpdateCard(),
+            const SizedBox(height: 20),
             SettingsGroup(
               title: locale.t('ajustes_basico'),
               subtitle: locale.t('ajustes_basico_d'),

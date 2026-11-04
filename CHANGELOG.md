@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.3.0
+- **Actualizar sin salir de la app**: al tocar «Actualizar ahora» la app descarga el APK nuevo con una barra de
+  progreso, comprueba que esté completo y sin alterar (tamaño y SHA-256 de GitHub) y abre el instalador de Android.
+  Solo falta tocar «Actualizar» en esa pantalla; tus datos se conservan. Ya no hace falta pasar por GitHub.
+- **Aviso al abrir la app**: si hay una versión nueva, aparece en pantalla (una vez por sesión) con las novedades.
+  «Más tarde» lo cierra solo por esa sesión; «Omitir esta versión» no vuelve a avisar de esa versión.
+- **Botón a la vista**: la primera tarjeta de Ajustes es ahora «Actualizaciones», con la versión instalada y un botón
+  grande («Actualizar a X» o «Buscar actualización»).
+- Los APK descargados se borran solos después de actualizar.
+- Si el build completo falla por el plugin del instalador, el workflow compila sin él (se vuelve a descargar desde el navegador).
+- Requiere que los APK se firmen siempre con la misma clave (ver SIGNING.md); si no, Android rechaza la instalación.
+
 ## 2.2.0
 - **Pareja · Gastos fijos compartidos** (pestaña Saldo): renta, internet, servicios… Eliges monto, día del mes,
   quién paga y cuánto te toca; se registran solos cada mes (también sin internet) y tu pareja los ve en

@@ -1,11 +1,21 @@
 import 'dart:convert';
-import 'dart:io' show Platform;
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:hive/hive.dart';
+import 'package:path_provider/path_provider.dart';
 import '../app_config.dart';
+import '../services/apk_installer.dart';
+import '../services/update_downloader.dart';
 import '../services/update_service.dart';
+import '../services/url_service.dart';
 
 enum UpdateCheckResult { available, upToDate, failed, disabled }
+
+/// En qué paso va la actualización dentro de la app.
+enum UpdatePhase { idle, downloading, installing }
+
+/// Qué salió mal (si algo salió mal).
+enum UpdateProblem { none, network, invalid, noApk, permission, installer }
 
 /// Comprueba si hay una versión nueva en GitHub Releases (máx. una vez al
 /// día de forma automática) y recuerda si el usuario la pospuso u omitió.
@@ -19,8 +29,133 @@ class UpdateProvider extends ChangeNotifier {
   UpdateInfo? _available;
   bool _checking = false;
 
+  UpdatePhase _phase = UpdatePhase.idle;
+  double _progress = 0;
+  UpdateProblem _problem = UpdateProblem.none;
+  bool _installerOpened = false;
+  bool _sessionDismissed = false;
+  bool _promptedThisSession = false;
+  String? _readyPath;
+  UpdateDownloader? _downloader;
+
   UpdateProvider(this.settingsBox) {
     _loadCached();
+    _cleanup();
+  }
+
+  UpdatePhase get phase => _phase;
+  double get progress => _progress;
+  UpdateProblem get problem => _problem;
+
+  /// El instalador de Android ya se abrió: falta que el usuario confirme.
+  bool get installerOpened => _installerOpened;
+
+  /// La actualización se puede instalar sin salir de la app.
+  bool get canInstallInApp => ApkInstaller.isAvailable;
+
+  DateTime? get lastCheck => DateTime.tryParse((settingsBox.get(_lastCheckKey) as String?) ?? '');
+
+  /// Hay una versión nueva (aunque se haya pospuesto el aviso).
+  bool get hasUpdate => _available != null && _available!.build > kAppBuild;
+
+  /// Conviene mostrar el aviso a pantalla completa al abrir la app: una vez
+  /// por sesión, salvo que la versión se haya omitido.
+  bool get promptPending => showBanner && !_sessionDismissed && !_promptedThisSession;
+
+  void markPrompted() => _promptedThisSession = true;
+
+  /// "Más tarde": cierra el aviso solo por esta sesión (el cartel del Resumen se queda).
+  void dismissForSession() {
+    _sessionDismissed = true;
+    notifyListeners();
+  }
+
+  Future<Directory> _updateDir() async => Directory('${(await getTemporaryDirectory()).path}/update');
+
+  /// Borra los APK descargados cuando ya no hay nada pendiente (p. ej. tras actualizar).
+  Future<void> _cleanup() async {
+    if (_available != null) return;
+    try {
+      final Directory dir = await _updateDir();
+      if (await dir.exists()) await dir.delete(recursive: true);
+    } catch (_) {}
+  }
+
+  /// Descarga la actualización dentro de la app, la verifica y abre el
+  /// instalador de Android. Sin instalador disponible, abre el navegador.
+  Future<void> startUpdate() async {
+    final UpdateInfo? info = _available;
+    if (info == null || _phase != UpdatePhase.idle) return;
+    _problem = UpdateProblem.none;
+    _installerOpened = false;
+    _progress = 0;
+
+    if (!ApkInstaller.isAvailable || info.downloadUrl == null) {
+      final bool opened = await UrlService().open(info.downloadUrl ?? info.pageUrl);
+      if (!opened) _problem = UpdateProblem.installer;
+      notifyListeners();
+      return;
+    }
+
+    try {
+      File? file;
+      if (_readyPath != null && await File(_readyPath!).exists()) file = File(_readyPath!);
+      if (file == null) {
+        _phase = UpdatePhase.downloading;
+        notifyListeners();
+        _downloader = UpdateDownloader();
+        file = await _downloader!.download(
+          info,
+          dir: await _updateDir(),
+          onProgress: (double p) {
+            _progress = p;
+            notifyListeners();
+          },
+        );
+        _readyPath = file.path;
+      }
+      _phase = UpdatePhase.installing;
+      notifyListeners();
+      switch (await ApkInstaller().install(file.path)) {
+        case InstallOutcome.opened:
+          _installerOpened = true;
+          break;
+        case InstallOutcome.permissionNeeded:
+          _problem = UpdateProblem.permission;
+          break;
+        default:
+          _problem = UpdateProblem.installer;
+      }
+    } on DownloadException catch (e) {
+      switch (e.error) {
+        case DownloadError.invalid:
+          _problem = UpdateProblem.invalid;
+          break;
+        case DownloadError.noApk:
+          _problem = UpdateProblem.noApk;
+          break;
+        case DownloadError.cancelled:
+          _problem = UpdateProblem.none;
+          break;
+        case DownloadError.network:
+          _problem = UpdateProblem.network;
+          break;
+      }
+    } catch (_) {
+      _problem = UpdateProblem.network;
+    } finally {
+      _phase = UpdatePhase.idle;
+      _downloader = null;
+      notifyListeners();
+    }
+  }
+
+  void cancelDownload() => _downloader?.cancel();
+
+  void clearProblem() {
+    _problem = UpdateProblem.none;
+    _installerOpened = false;
+    notifyListeners();
   }
 
   /// Hay comprobación posible solo si se configuró el repositorio.

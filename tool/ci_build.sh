@@ -51,6 +51,10 @@ strip_notifications() {
   cp tool/lite/quick_actions_service.dart lib/services/quick_actions_service.dart
   cp tool/lite/url_service.dart lib/services/url_service.dart
 }
+strip_installer() {
+  sed -i '/open_filex:/d' pubspec.yaml
+  cp tool/lite/apk_installer.dart lib/services/apk_installer.dart
+}
 reset_sources() { git checkout -- pubspec.yaml lib/services; }
 
 summarize_failure() {   # $1 = etiqueta, $2 = archivo de log
@@ -83,24 +87,30 @@ MODE=""
 if attempt "completa" 1; then
   MODE="completa"
 else
-  reset_sources; strip_biometrics
-  if attempt "sin-huella" 1; then
-    MODE="sin-huella"
+  reset_sources; strip_installer
+  if attempt "sin-instalador" 1; then
+    MODE="sin-instalador"
   else
-    reset_sources; strip_ocr
-    if attempt "sin-ocr" 1; then
-      MODE="sin-ocr"
+    # Desde aquí el instalador de actualizaciones también se recorta (ya se sabe que no es lo único que falla).
+    reset_sources; strip_installer; strip_biometrics
+    if attempt "sin-huella" 1; then
+      MODE="sin-huella"
     else
-      reset_sources; strip_notifications
-      if attempt "sin-notificaciones" 0; then
-        MODE="sin-notificaciones"
+      reset_sources; strip_installer; strip_ocr
+      if attempt "sin-ocr" 1; then
+        MODE="sin-ocr"
       else
-        reset_sources; strip_ocr; strip_biometrics; strip_notifications
-        if attempt "lite" 0; then
-          MODE="lite"
+        reset_sources; strip_installer; strip_notifications
+        if attempt "sin-notificaciones" 0; then
+          MODE="sin-notificaciones"
         else
-          echo "::error::Fallaron todos los intentos de compilación."
-          exit 1
+          reset_sources; strip_installer; strip_ocr; strip_biometrics; strip_notifications
+          if attempt "lite" 0; then
+            MODE="lite"
+          else
+            echo "::error::Fallaron todos los intentos de compilación."
+            exit 1
+          fi
         fi
       fi
     fi
@@ -111,7 +121,8 @@ echo "BUILD_MODE=$MODE" >> "$ENVFILE"
 {
   echo "### ✅ Modo de compilación: $MODE"
   case "$MODE" in
-    completa) echo "Incluye escaneo de facturas, huella, notificaciones y atajos." ;;
+    completa) echo "Incluye escaneo de facturas, huella, notificaciones, atajos y actualización dentro de la app." ;;
+    sin-instalador) echo "Sin instalar actualizaciones dentro de la app (se descargan desde el navegador)." ;;
     sin-huella) echo "Sin desbloqueo por huella (el PIN sí funciona)." ;;
     sin-ocr) echo "Sin escaneo de facturas." ;;
     sin-notificaciones) echo "Sin notificaciones ni atajos de pantalla." ;;

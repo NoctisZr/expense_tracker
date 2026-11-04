@@ -1,7 +1,7 @@
 name: expense_tracker
 description: "Expense Tracker: dashboard de finanzas personales con bóvedas de ahorro y conversor de divisas en tiempo real."
 publish_to: 'none'
-version: 2.2.0+20
+version: 2.3.0+21
 
 environment:
   sdk: '>=3.4.0 <4.0.0'
@@ -33,6 +33,8 @@ dependencies:
   crypto: ^3.0.3
   # Cifrado de extremo a extremo de la sincronización de pareja (AES-GCM).
   cryptography: ^2.7.0
+  # Instala el APK de una actualización descargado dentro de la app.
+  open_filex: ^4.5.0
 
   # Fondo personalizado: elegir imagen + redimensionar/desenfocar
   image_picker: ^1.1.0

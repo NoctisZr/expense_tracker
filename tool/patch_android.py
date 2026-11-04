@@ -63,7 +63,12 @@ def patch_manifest():
     log(f"nombre de la app: {label}" if n_label else "no se encontró android:label en el manifiesto")
     log("icono de Nuvio asignado" if n_icon else "no se encontró android:icon en el manifiesto")
 
-    permissions = ["android.permission.INTERNET", "android.permission.USE_BIOMETRIC"]
+    permissions = [
+        "android.permission.INTERNET",
+        "android.permission.USE_BIOMETRIC",
+        # Permite instalar la actualización descargada dentro de la app.
+        "android.permission.REQUEST_INSTALL_PACKAGES",
+    ]
     if with_notifications:
         permissions += [
             "android.permission.POST_NOTIFICATIONS",
