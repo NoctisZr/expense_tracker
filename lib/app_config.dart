@@ -5,10 +5,10 @@
 const String kAppName = 'Nuvio';
 
 /// Versión de la app (viene de pubspec.yaml).
-const String kAppVersion = '2.3.0';
+const String kAppVersion = '2.4.0';
 
 /// Número de build (lo que va después del "+" en pubspec.yaml).
-const int kAppBuild = 21;
+const int kAppBuild = 22;
 
 /// "owner/nombre" del repositorio de GitHub donde se publican los releases.
 /// Vacío = sin comprobación de actualizaciones.

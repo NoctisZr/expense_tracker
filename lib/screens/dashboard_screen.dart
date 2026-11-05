@@ -8,6 +8,7 @@ import '../providers/theme_provider.dart';
 import '../utils/app_colors.dart';
 import '../utils/app_navigation.dart';
 import '../utils/category_style.dart';
+import '../utils/expense_filter.dart';
 import '../utils/formatters.dart';
 import '../widgets/add_expense_section.dart';
 import '../widgets/account_widgets.dart';
@@ -23,6 +24,8 @@ import '../widgets/category_selector_row.dart';
 import '../widgets/category_summary.dart';
 import '../providers/couple_provider.dart';
 import '../widgets/couple_view.dart';
+import '../widgets/expense_filter_ui.dart';
+import '../widgets/payment_calendar.dart';
 import '../widgets/view_tabs.dart';
 import '../widgets/credits_section.dart';
 import '../widgets/region_helpers.dart';
@@ -78,14 +81,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   int _view = 0; // 0 Resumen, 1 Movimientos, 2 Planificación
   bool _showCalendar = false;
-  DateTimeRange? _range;
-  String? _filterTag;
 
   /// Cuántos gastos se dibujan en la lista (se amplía con "Mostrar más"). Con
   /// miles de gastos, dibujarlos todos a la vez hacía lenta la pantalla.
   int _visibleCount = 40;
-  String _query = '';
-  String? _filterCategory;
+
+  /// Búsqueda y filtros de Movimientos.
+  ExpenseFilter _filter = const ExpenseFilter();
 
   void _confirmDeleteVault(String id, LocaleProvider locale) {
     showDialog(
@@ -146,21 +148,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final vaults = finance.vaults;
     final incomes = finance.incomes;
 
-    final String query = _query.trim().toLowerCase();
-    final List<Expense> filtered = expenses
-        .where((e) =>
-            (_filterCategory == null || e.category == _filterCategory) &&
-            (_filterTag == null || (e.tags ?? const <String>[]).contains(_filterTag)) &&
-            (query.isEmpty || e.name.toLowerCase().contains(query)) &&
-            (_range == null ||
-                (!e.date.isBefore(_range!.start) &&
-                    e.date.isBefore(_range!.end.add(const Duration(days: 1))))))
-        .toList();
+    final List<Expense> filtered = _filter.apply(
+      expenses,
+      valueOf: (e) => finance.expenseLocalValue(e, currency),
+      categoryLabel: (c) => locale.t(categoryLabelKey(c)),
+      accountName: (id) {
+        for (final a in finance.accounts) {
+          if (a.id == id) return a.name;
+        }
+        return '';
+      },
+    );
     final int shownCount = filtered.length < _visibleCount ? filtered.length : _visibleCount;
-    final bool filtersActive =
-        query.isNotEmpty || _filterCategory != null || _filterTag != null || _range != null;
     double filteredTotal = 0;
-    if (filtersActive) {
+    if (_filter.isActive) {
       for (final e in filtered) {
         filteredTotal += finance.expenseLocalValue(e, currency);
       }
@@ -424,111 +425,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
             const SizedBox(height: 14),
             if (!_showCalendar && expenses.isNotEmpty) ...[
-              TextField(
-                onChanged: (value) => setState(() {
-                  _query = value;
+              ExpenseFilterBar(
+                filter: _filter,
+                resultCount: filtered.length,
+                resultTotal: filteredTotal,
+                onChanged: (f) => setState(() {
+                  _filter = f;
                   _visibleCount = 40;
                 }),
-                decoration: InputDecoration(
-                  hintText: locale.t('buscar_gastos'),
-                  prefixIcon: const Icon(Icons.search_rounded),
-                ),
               ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () async {
-                        final DateTime now = DateTime.now();
-                        final DateTimeRange? picked = await showDateRangePicker(
-                          context: context,
-                          firstDate: DateTime(2000),
-                          lastDate: now.add(const Duration(days: 366)),
-                          initialDateRange: _range,
-                        );
-                        if (picked != null) {
-                          setState(() {
-                            _range = picked;
-                            _visibleCount = 40;
-                          });
-                        }
-                      },
-                      icon: const Icon(Icons.date_range_rounded, size: 18),
-                      label: Text(
-                        _range == null
-                            ? locale.t('rango_fechas')
-                            : '${formatDateShort(_range!.start)} – ${formatDateShort(_range!.end)}',
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ),
-                  if (_range != null)
-                    IconButton(
-                      onPressed: () => setState(() {
-                        _range = null;
-                        _visibleCount = 40;
-                      }),
-                      icon: const Icon(Icons.close, size: 18),
-                      visualDensity: VisualDensity.compact,
-                    ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  CategoryChip(
-                    icon: Icons.apps_rounded,
-                    label: locale.t('todas'),
-                    selected: _filterCategory == null,
-                    color: theme.colorScheme.primary,
-                    onTap: () => setState(() {
-                      _filterCategory = null;
-                      _visibleCount = 40;
-                    }),
-                  ),
-                  for (final cat in ExpenseCategory.all)
-                    CategoryChip(
-                      icon: categoryIcon(cat),
-                      label: locale.t(categoryLabelKey(cat)),
-                      selected: _filterCategory == cat,
-                      color: categoryColor(cat),
-                      onTap: () => setState(() {
-                        _filterCategory = _filterCategory == cat ? null : cat;
-                        _visibleCount = 40;
-                      }),
-                    ),
-                ],
-              ),
-              if (finance.topTags().isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 4,
-                  children: [
-                    for (final tag in finance.topTags())
-                      FilterChip(
-                        label: Text('#$tag', style: const TextStyle(fontSize: 12)),
-                        selected: _filterTag == tag,
-                        onSelected: (selected) => setState(() {
-                          _filterTag = selected ? tag : null;
-                          _visibleCount = 40;
-                        }),
-                      ),
-                  ],
-                ),
-              ],
               const SizedBox(height: 12),
-              if (filtersActive)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: Text(
-                    '${filtered.length} · ${locale.t('total_filtrado')}: ${formatCurrency(filteredTotal, finance.localCurrency)}',
-                    style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
-                  ),
-                ),
             ],
             if (_showCalendar)
               SectionCard(child: const ExpenseCalendar())
@@ -567,6 +473,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             if (_view == 3) const CoupleView(),
             if (_view == 2) ...[
               const UpcomingCharges(),
+              const PaymentCalendarSection(),
+              const SizedBox(height: 18),
               const SubscriptionSuggestions(),
               const BudgetSection(),
               const SizedBox(height: 18),

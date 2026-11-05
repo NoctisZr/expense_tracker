@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.4.0
+- **Búsqueda y filtros de Movimientos, mucho más completos**:
+  - El buscador mira nombre, nota, categoría, etiquetas, cuenta y monto (todas las palabras deben aparecer).
+  - Periodos de un toque: Todo, Hoy, Esta semana, Este mes, Mes pasado, Este año u otras fechas.
+  - Hoja de filtros: varias categorías y etiquetas, cuenta, moneda, rango de monto (en tu moneda), tipo de
+    gasto (personales, en pareja, de créditos) y orden (más recientes, más antiguos, mayor o menor monto).
+  - Los filtros activos se ven como etiquetas que se quitan con ×, con un resumen de cantidad, total y promedio.
+- **Calendario de pagos** (Planes): un calendario del mes con lo que viene —gastos recurrentes, cuotas de créditos,
+  gastos fijos de pareja e ingresos esperados—, el total por pagar del mes, el próximo pago y el detalle de cada día
+  (también los gastos ya registrados ese día).
+
 ## 2.3.0
 - **Actualizar sin salir de la app**: al tocar «Actualizar ahora» la app descarga el APK nuevo con una barra de
   progreso, comprueba que esté completo y sin alterar (tamaño y SHA-256 de GitHub) y abre el instalador de Android.
